@@ -23,7 +23,7 @@ public slots:
 
 private:
 
-    QNetworkAccessManager manager;
+    QNetworkAccessManager *manager;
 
     QString serverUrl =API_URL;
 

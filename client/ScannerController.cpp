@@ -2,6 +2,7 @@
 #include <QMetaObject>
 #include <QDebug>
 #include <QTimer>
+#include <QImageReader>
 #include "ImportTask.h"
 #include "DatabaseWorker.h"
 #include "PhotoTreeModel.h"
@@ -11,6 +12,12 @@ ScannerController::ScannerController(PhotoRepository *repository,SettingsManager
 QObject(parent), m_repository(repository),m_settings(settings)
 {
     m_photoTree = new PhotoTreeModel(this);
+    
+    m_repositoryThread = new QThread(this);
+    m_repository->moveToThread(m_repositoryThread);
+    connect(m_repositoryThread, &QThread::finished, m_repository, &QObject::deleteLater);
+    m_repositoryThread->start();
+
     qDebug() << "Connecting repository:" << m_repository;
     connect(m_repository,&PhotoRepository::mediaLoaded,this,&ScannerController::mediaLoaded);
     connect(m_repository,&PhotoRepository::foldersLoaded,this,&ScannerController::foldersLoaded);
@@ -28,40 +35,13 @@ QObject(parent), m_repository(repository),m_settings(settings)
         this->reConnected(); 
     });
 }
-/*ScannerController::ScannerController(QObject *parent)
-    : QObject(parent)
-{
-    m_photoTree = new PhotoTreeModel(this);
 
-    m_database = new DatabaseWorker(&m_cache);
-
-    m_database->moveToThread(&m_databaseThread);
-
-    connect(&m_databaseThread,&QThread::finished,m_database,&QObject::deleteLater);
-
-    connect(m_database,&DatabaseWorker::status,this,&ScannerController::status);
-
-    m_databaseThread.start();
-
-    m_pool.setMaxThreadCount(QThread::idealThreadCount());
-//    connect(m_database,&DatabaseWorker::photoTreeLoaded,this,[this](const QList<PhotoRecord> &photos)
-//        {
-//          m_photoTree->buildTree(photos);
-//        }
-//    );
-    void photoLoaded(const PhotoRecord &photo);
-    void photoLoaded(const PhotoRecord &photo);
-    connect(m_database, &DatabaseWorker::photoLoaded, this, &ScannerController::selectPhotoLoaded);
-    connect(m_database, &DatabaseWorker::connected, this, &ScannerController::databaseConnected);
-    connect(m_database, &DatabaseWorker::photoTreeLoaded,this, &ScannerController::photoTreeLoaded);
-}*/
 
 ScannerController::~ScannerController()
 {
+    m_repositoryThread->quit();
+    m_repositoryThread->wait();
 //    m_pool.waitForDone();
-
-//    m_databaseThread.quit();
-//    m_databaseThread.wait();
 }
 PhotoTreeModel* ScannerController::photoTree() const
 {
@@ -70,15 +50,12 @@ PhotoTreeModel* ScannerController::photoTree() const
 
 void ScannerController::selectPhoto(int id)
 {
-    if(id>0)   m_repository->loadPhoto(id);
+    QMetaObject::invokeMethod(m_repository, [this, id]() { m_repository->loadPhoto(id); }, Qt::QueuedConnection);
 }
 void ScannerController::loadTree()
 {
-//    m_loadedMedia.clear();
-//    m_loadedFolders.clear();
     m_photoTree->clear();
-    
-    m_repository->loadMedia();
+    QMetaObject::invokeMethod(m_repository, &PhotoRepository::loadMedia, Qt::QueuedConnection);
 }
 void ScannerController::photoLoaded(PhotoRecord photo)
 {
@@ -97,15 +74,17 @@ QString ScannerController::thumbnailDataSource() const
 }
 void ScannerController::loadMedia()
 {
-    m_repository->loadMedia();
+    QMetaObject::invokeMethod(m_repository, &PhotoRepository::loadMedia, Qt::QueuedConnection);
 }
 void ScannerController::mediaLoaded(QStringList media)
 {
     m_photoTree->addMedia(media);
     for (const QString &name : media)
     {
-//        m_loadedMedia.insert(name);
-        m_repository->loadFolders(name);
+//      m_loadedMedia.insert(name);
+        QMetaObject::invokeMethod(m_repository, [this, name](){
+         m_repository->loadFolders(name);
+        }, Qt::QueuedConnection);       
     }
     emit status(QString("Media count: %1").arg(media.size()));
 }
@@ -123,7 +102,9 @@ void ScannerController::mediaLoaded(QStringList media)
 void ScannerController::loadFolders(const QString &media)
 {
 //    if(!m_loadedMedia.contains(media)) m_loadedMedia.insert(media);
+    QMetaObject::invokeMethod(m_repository, [this, media](){
     m_repository->loadFolders(media);
+    }, Qt::QueuedConnection);
 }
 void ScannerController::foldersLoaded(QString media,QStringList folders)
 {
@@ -135,7 +116,9 @@ void ScannerController::loadPhotos(const QString &media,const QString &path)
 //    QString key = media + path;
 //    if(m_loadedFolders.contains(key)) return;
 //    m_loadedFolders.insert(key);
-    m_repository->loadPhotos(media,path);
+    QMetaObject::invokeMethod(m_repository, [this, media, path](){
+    m_repository->loadPhotos(media, path);
+    }, Qt::QueuedConnection);    
 }
 void ScannerController::photosLoaded(QList<PhotoRecord> photos)
 {
@@ -148,103 +131,139 @@ void ScannerController::reConnected()
 }
 
 
-
-/*bool ScannerController::connectDatabase(
-        const QString &host,
-        int port,
-        const QString &database,
-        const QString &user,
-        const QString &password)
+void ScannerController::scanFolder(const QString &media,const QString &folder)
 {
-    bool ok = false;
-
-    QMetaObject::invokeMethod(
-        m_database,
-        [&]()
-        {
-            m_database->open(host,port,database,user,password);
-        },
-        Qt::BlockingQueuedConnection);
-
-    return ok;
-}
-void ScannerController::scanFolder(
-        const QString &folder)
-{
-    m_rootFolder = folder;
-
-    m_totalFiles = 0;
-    m_processedFiles = 0;
-
-    QStringList filters;
-
-    filters
-            << "*.jpg"
-            << "*.jpeg"
-            << "*.png"
-            << "*.bmp"
-            << "*.tif"
-            << "*.tiff"
-            << "*.webp";
-
-    QDirIterator it(
-            folder,
-            filters,
-            QDir::Files,
-            QDirIterator::Subdirectories);
-
-    while(it.hasNext())
-    {
-        QString filename = it.next();
-
-        QFileInfo info(filename);
-
-        FileKey key;
-
-        key.path = info.absolutePath();
-        key.file = info.fileName();
-        key.size = info.size();
-        key.modified = info.lastModified();
-
-        if(m_cache.contains(key))
-            continue;
-
-        PhotoRecord photo;
-
-        photo.file = key.file;
-        photo.path = QDir::fromNativeSeparators(key.path);
-        photo.fullPath = filename;
-        photo.fileSize = key.size;
-        photo.lastModified = key.modified;
-        photo.extension = info.suffix().toLower();
-
-        enqueueImport(photo);
-
-        ++m_totalFiles;
+    // Импорт с диска поддерживается только для локальной БД
+    auto *dbWorker = qobject_cast<DatabaseWorker*>(m_repository);
+    if (!dbWorker) {
+        emit status("Импорт с диска недоступен в режиме API");
+        return;
     }
 
-    emit status(
-        QString("Добавлено задач: %1")
-        .arg(m_totalFiles));
-}
-void ScannerController::enqueueImport(
-        const PhotoRecord &photo)
-{
-    ImportTask *task =new ImportTask(photo,m_database,&m_pool);
+    emit importRunningChanged();
+    m_importRunning = true;
 
+    QMetaObject::invokeMethod(m_repository, [this, media,folder,dbWorker](){
+        dbWorker->loadCache(media,folder, &(this->m_cache));
+    },  Qt::BlockingQueuedConnection);
+    QStringList filters;
+    //filters << "*.jpg" << "*.jpeg" << "*.png" << "*.bmp"<< "*.tif" << "*.tiff" << "*.webp"<<"*.gif"<<"*.wmf";
+    filters << "*.*";
+
+    QStringList filenames;
+    QDirIterator it(folder, filters, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) filenames << it.next();
+    m_rootFolder = folder;
+    m_totalFiles = filenames.size();
+    m_processedFiles.storeRelaxed(0);
+    m_reportInterval = qMax(1, m_totalFiles / 200);
+
+    int index = 0;int existCount=0;
+    for (const QString &filename : filenames) {
+        QFileInfo info(filename);
+        FileKey key;
+        key.path = info.absolutePath();//убрать букву 
+        key.file = info.fileName();
+        key.size = info.size();        
+        key.modified = info.lastModified();
+        if (!m_cache.contains(key)) {
+            PhotoRecord photo;
+            photo.file = info.fileName();
+            photo.path = QDir::fromNativeSeparators(info.absolutePath());
+            photo.fullPath = filename;
+            photo.fileSize = info.size();
+            photo.lastModified = info.lastModified();
+            photo.extension = info.suffix().toLower();
+            bool shouldReport = (index % m_reportInterval == 0) || (index == m_totalFiles - 1);
+            enqueueImport(photo, shouldReport);
+        } 
+        else {incrementProcessed();++existCount;}   
+        ++index;
+    }
+    emit importProgressChanged();
+    emit status(QString("Добавлено файлов: %1 уже существуют загружены %2").arg(m_totalFiles,existCount));
+}
+
+
+void ScannerController::enqueueImport(const PhotoRecord &photo, bool reportProgress)
+{
+    auto *dbWorker = qobject_cast<DatabaseWorker*>(m_repository);
+    if (!dbWorker) return;
+
+    ImportTask *task = new ImportTask(photo, dbWorker, &m_pool, this, reportProgress);
     m_pool.start(task);
 }
-void ScannerController::generateMissingThumbnails(const QString &rootFolder)
+
+bool isSupportedImage(const PhotoRecord &photo)
 {
+    static const QSet<QByteArray> supported = []{
+        QSet<QByteArray> set;
+        for (const QByteArray &fmt : QImageReader::supportedImageFormats())
+            set.insert(fmt.toLower());
+        return set;
+    }();
+
+    QByteArray ext = photo.extension.toLower().toLatin1();
+    if (!supported.contains(ext))
+        return false;
+
+    // QImageReader reader(photo.fullPath);
+    // if (!reader.canRead())
+    //     return false;
+
+    return true;
+}
+
+void ScannerController::generateMissingThumbnails(const QString &media,const QString &rootFolder) {
+    
+    // Импорт с диска поддерживается только для локальной БД
+    auto *dbWorker = qobject_cast<DatabaseWorker*>(m_repository);
+    if (!dbWorker) {
+        emit status("Импорт с диска недоступен в режиме API");
+        return;
+    }
     QList<PhotoRecord> photos;
 
-    QMetaObject::invokeMethod(m_database,[&](){photos = m_database->getPhotosWithoutThumbnail(rootFolder);},Qt::BlockingQueuedConnection);
-    emit status(QString("Найдено %1 фотографий без миниатюр").arg(photos.size()));
-
-    for (const PhotoRecord &photo : photos){
-        m_pool.start(new ThumbnailTask(photo,m_database));
+    QMetaObject::invokeMethod(dbWorker, [&]() { photos = dbWorker->getPhotosWithoutThumbnail(media,rootFolder); }, Qt::BlockingQueuedConnection); 
+    
+    QList<PhotoRecord> imagePhotos;
+    imagePhotos.reserve(photos.size());
+    int skipped = 0;
+    for (const PhotoRecord &photo : photos) {
+        if (isSupportedImage(photo))
+            imagePhotos.append(photo);
+        else
+            ++skipped;
     }
-}*/
+
+    m_totalFiles = photos.size();
+    m_processedFiles = 0;
+    m_importRunning = !photos.isEmpty();
+    emit importRunningChanged();
+    emit importProgressChanged();
+    emit status(QString("Найдено %1 фото без миниатюр (пропущено неподходящих: %2)").arg(imagePhotos.size()).arg(skipped));
+
+    int index = 0;
+    for (PhotoRecord &photo : imagePhotos){
+        photo.mediaName = media;
+        bool shouldReport = (index % m_reportInterval == 0) || (index == m_totalFiles - 1);
+        m_pool.start(new ThumbnailTask(photo, dbWorker,this,shouldReport));
+        ++index;
+    }
+}
+void ScannerController::onFileProcessed()
+{
+    emit importProgressChanged();
+    if (m_processedFiles.loadRelaxed() >= m_totalFiles) {
+        m_importRunning = false;
+        emit importRunningChanged();
+        emit status("Импорт завершён");
+    }
+}
+void ScannerController::incrementProcessed()
+{
+    m_processedFiles.fetchAndAddRelaxed(1);
+}
 void ScannerController::databaseConnected(bool ok)
 {
     if (!ok) {
@@ -260,26 +279,3 @@ void ScannerController::photoTreeLoaded(const QList<PhotoRecord> &photos)
 //    m_photoTree->buildTree(photos);
     emit status(QString("Photo tree loaded: %1 files").arg(photos.size()));
 }
-/*void ScannerController::treeItemExpanded(int type, QString media, QString path)
-{
-    switch (type){
-//    case PhotoTreeItem::Media:
-//    {
-//      if (m_loadedMedia.contains(media)) return;
-//        m_loadedMedia.insert(media);
-//        m_repository->loadFolders(media);
-//        break;
-//    }
-
-    case PhotoTreeItem::Folder:
-    {
-//        QString key = media + "|" + path;
-//        if (m_loadedFolders.contains(key)) return;
-//        m_loadedFolders.insert(key);
-        m_repository->loadPhotos(media, path);
-        break;
-    }
-    default:
-        break;
-    }
-}*/

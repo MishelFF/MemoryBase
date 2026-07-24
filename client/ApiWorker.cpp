@@ -4,7 +4,10 @@
 #include <QJsonObject>
 #include <QNetworkReply>
 
-ApiWorker::ApiWorker(QObject *parent) : PhotoRepository(parent) { qDebug() << "ApiWorker created";}
+ApiWorker::ApiWorker(QObject *parent) : PhotoRepository(parent) { 
+    manager = new QNetworkAccessManager(this);
+    qDebug() << "ApiWorker created";
+}
 
 void ApiWorker::open(SettingsManager *rpSettings) { 
     QString url=rpSettings->apiUrl().trimmed();
@@ -15,7 +18,7 @@ void ApiWorker::open(SettingsManager *rpSettings) {
 
 void ApiWorker::loadMedia() {// Загрузка списка носителей
     QUrl url(serverUrl + "media.php");
-    QNetworkReply *reply = manager.get(QNetworkRequest(url));
+    QNetworkReply *reply = manager->get(QNetworkRequest(url));
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
             emit error(reply->errorString());
@@ -37,7 +40,7 @@ void ApiWorker::loadFolders(const QString &mediaName) {// Загрузка па�
     query.addQueryItem("media", mediaName);
     QUrl url(serverUrl + "folders.php");
     url.setQuery(query);
-    QNetworkReply *reply = manager.get(QNetworkRequest(url));
+    QNetworkReply *reply = manager->get(QNetworkRequest(url));
     connect(reply, &QNetworkReply::finished, this, [this, reply, mediaName]() {
         if (reply->error() != QNetworkReply::NoError) {
             emit error(reply->errorString());
@@ -63,7 +66,7 @@ void ApiWorker::loadPhotos(const QString &mediaName, const QString &path) {
     QUrl url(serverUrl + "photos.php");
     url.setQuery(query);
     qDebug()<<"Запрос  :"<<url.toString(QUrl::FullyDecoded);
-    QNetworkReply *reply = manager.get(QNetworkRequest(url));
+    QNetworkReply *reply = manager->get(QNetworkRequest(url));
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
             emit error(reply->errorString());
@@ -99,7 +102,7 @@ void ApiWorker::loadPhoto(int id) {
     QUrl url(serverUrl + "thumbnail.php");
     url.setQuery(query);
     qDebug()<<"Запрос  :"<<url.toString(QUrl::FullyDecoded);
-    QNetworkReply *reply = manager.get(QNetworkRequest(url));
+    QNetworkReply *reply = manager->get(QNetworkRequest(url));
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
             emit error(reply->errorString());

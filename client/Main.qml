@@ -12,7 +12,9 @@ ApplicationWindow {
 
     property string mediaLabel:"WD1000"
     property string rootFolder: ""
-    
+    property bool importPanelVisible: false   
+    property string pendingAction: ""         
+         
     SettingsDialog {
         id: settingsDlg
     }
@@ -29,10 +31,17 @@ ApplicationWindow {
 
         onAccepted:
         {
-            rootFolder = selectedFolder?.toLocalFile()?.replace(/^.:/, "") || ""
-       //  rootFolder = selectedFolder.toString().replace("file:///","")
-            console.log(selectedFolder)
-        //    FolderTree.setRootFolder(rootFolder)
+            let rawUrl = dlg.selectedFolder || dlg.folder;
+
+            if (rawUrl) {
+                let urlString = Qt.resolvedUrl(rawUrl).toString();
+                if (urlString && urlString !== "undefined") {
+                    rootFolder = urlString.replace(/^file:\/\/\/?/, "");
+                    console.log("Успешно получен путь:", rootFolder);
+                    statusText.text = rootFolder;
+                }
+            }
+
         }
     }
     Connections {
@@ -71,15 +80,19 @@ ApplicationWindow {
             {
                 text: "Импорт новых файлов"
                 enabled: rootFolder !== ""
-                onTriggered:
-                    scannerController.scanFolder(rootFolder)
+                onTriggered:{
+                    pendingAction = "scan"
+                    importPanelVisible = true
+                }
             }
             MenuItem
             {
                 text: "Создать недостающие миниатюры"
                 enabled: rootFolder !== ""
-                onTriggered:
-                    scannerController.generateMissingThumbnails(rootFolder)
+                onTriggered:{
+                    pendingAction = "thumbnails"
+                    importPanelVisible = true
+                }
             }
         }
     }
@@ -141,47 +154,96 @@ ApplicationWindow {
         Frame
         {
             SplitView.fillWidth: true
-            ColumnLayout
-            {
+            StackLayout {
                 anchors.fill: parent
-                spacing: 10
-                Image
-                {
-                    id: preview
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    fillMode: Image.PreserveAspectFit
-                    source: scannerController.thumbnailSource
+                currentIndex: importPanelVisible ? 1 : 0
+                ColumnLayout {
+                    spacing: 10
+                    Image {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        fillMode: Image.PreserveAspectFit
+                        source: scannerController.thumbnailSource
+                    }
+                    Rectangle
+                    {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: "#808080"
+                    }
+                    GridLayout
+                    {
+                        columns: 2
+                        columnSpacing: 10
+                        rowSpacing: 6
+                        Label { text: "Имя" }
+                        Label { text: "" }
+                        Label { text: "Дата" }
+                        Label { text: "" }
+                        Label { text: "Размер" }
+                        Label { text: "" }
+                        Label { text: "Камера" }
+                        Label { text: "" }
+                        Label { text: "Производитель" }
+                        Label { text: "" }
+                        Label { text: "Ширина" }
+                        Label { text: "" }
+                        Label { text: "Высота" }
+                        Label { text: "" }
+                        Label { text: "MD5" }
+                        Label { text: "" }
+                        Label { text: "GPS" }
+                        Label { text: "" }
+                    }
                 }
-                Rectangle
-                {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: "#808080"
-                }
-                GridLayout
-                {
-                    columns: 2
-                    columnSpacing: 10
-                    rowSpacing: 6
-                    Label { text: "Имя" }
-                    Label { text: "" }
-                    Label { text: "Дата" }
-                    Label { text: "" }
-                    Label { text: "Размер" }
-                    Label { text: "" }
-                    Label { text: "Камера" }
-                    Label { text: "" }
-                    Label { text: "Производитель" }
-                    Label { text: "" }
-                    Label { text: "Ширина" }
-                    Label { text: "" }
-                    Label { text: "Высота" }
-                    Label { text: "" }
-                    Label { text: "MD5" }
-                    Label { text: "" }
-                    Label { text: "GPS" }
-                    Label { text: "" }
+                ColumnLayout {
+                    spacing: 16
+                    Layout.margins: 20
+                    Label {
+                        text: pendingAction === "scan"
+                          ? "Импорт новых файлов"
+                          : "Создание миниатюр"
+                        font.bold: true
+                        font.pointSize: 14
+                    }
+                    Label { text: "Имя носителя (media):" }
+                    TextField {
+                        id: mediaNameField
+                        Layout.fillWidth: true
+                        enabled: !scannerController.importRunning
+                    }
+
+                    RowLayout {
+                        Button {
+                            text: "Начать"
+                            enabled: mediaNameField.text.trim() !== "" && !scannerController.importRunning
+                            onClicked: {
+                                if (pendingAction === "scan")
+                                    scannerController.scanFolder(mediaNameField.text, rootFolder)
+                                else
+                                    scannerController.generateMissingThumbnails(mediaNameField.text, rootFolder)
+                            }
+                        }
+                        Button {
+                            text: "Закрыть"
+                            enabled: !scannerController.importRunning
+                            onClicked: importPanelVisible = false
+                        }
+                    }
+                    ProgressBar {
+                        Layout.fillWidth: true
+                        from: 0
+                        to: Math.max(scannerController.importTotal, 1)
+                        value: scannerController.importProcessed
+                        visible: scannerController.importRunning || scannerController.importTotal > 0
+                    }
+
+                    Label {
+                        text: scannerController.importTotal > 0
+                          ? "Обработано: %1 / %2".arg(scannerController.importProcessed).arg(scannerController.importTotal)
+                          : ""
+                    }
+                    Item { Layout.fillHeight: true }  // прижимает контент к верху
                 }
             }
         }

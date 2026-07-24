@@ -8,6 +8,7 @@
 #define THUMB_SIZE 640
 #define CONNECTDATABASE true
 #define API_URL "http://box/mapi/"
+#define MAXFILESIZETOMD5 500000000
 
 struct PhotoRecord
 {

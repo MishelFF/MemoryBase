@@ -46,10 +46,6 @@ void DatabaseWorker::open(SettingsManager *rpSettings)
             qDebug()<<"Ошибка подключения :"<<db.lastError().text();
             emit connected(false);
     }
-//    loadCache();
-
-
-           
 }
 
 
@@ -60,24 +56,7 @@ void DatabaseWorker::close()
 
     QSqlDatabase::removeDatabase("PhotoDB");
 }
-/*
-bool DatabaseWorker::connectDatabase()
-{
 
-    QString connectionName ="PhotoDB_connection";
-    if(QSqlDatabase::contains(connectionName)){
-        db =QSqlDatabase::database(connectionName);
-    }
-    else{
-        db =QSqlDatabase::addDatabase("QPSQL",connectionName);
-        db.setHostName("box");
-        db.setPort(5432);
-        db.setDatabaseName("photobase");
-        db.setUserName("photouser");
-        db.setPassword("reflected");
-    }
-    return db.open();
-}*/
 
 void DatabaseWorker::loadMedia()
 {
@@ -148,18 +127,18 @@ void DatabaseWorker::loadPhotos(const QString &mediaName,const QString &path)
 
 
 
-void DatabaseWorker::loadCache()
+void DatabaseWorker::loadCache(const QString &media,const QString &path,FileCache* m_cache)
 {
     if(!m_cache) return;
     m_cache->clear();
 
     QSqlQuery query(db);
-//    query.clear();
-    QString safeLabel = QString("'"  MEDIA_LABEL "'");
-    QString rawSql = QString( "SELECT id, path, file, filesize, lastmodified FROM photobase.photo_images WHERE media_name = %1").arg(safeLabel);
-//    query.prepare(R"(SELECT id,path,file,filesize,lastmodified FROM photo_images WHERE media_name=:media_label)");
-//    query.bindValue(":media_label",safeLabel);
-    if(!query.exec(rawSql))
+//    QString safeLabel = QString("'"  media "'");
+//    QString rawSql = QString( "SELECT id, path, file, filesize, lastmodified FROM photobase.photo_images WHERE media_name = %1").arg(safeLabel);
+    query.prepare(R"(SELECT id,path,file,filesize,lastmodified FROM photo_images WHERE media_name=:media_label and path like :path)");
+    query.bindValue(":media_label",media);
+    query.bindValue(":path",media + "%");
+    if(!query.exec())
     {
         qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit status(query.lastError().text());
@@ -169,9 +148,7 @@ void DatabaseWorker::loadCache()
     {
         FileKey key;
 
-
         int id=query.value("id").toInt();
-
         key.path=query.value("path").toString();
         key.file=query.value("file").toString();
         key.size=query.value("filesize").toLongLong();
@@ -179,7 +156,6 @@ void DatabaseWorker::loadCache()
 
         m_cache->insert(key,id);
     }
-
     emit status(QString("Cache loaded: %1 files").arg(m_cache->size()));
 }
 //bool DatabaseWorker::exists(
@@ -187,8 +163,7 @@ void DatabaseWorker::loadCache()
 //{
  //   return m_cache->contains(key);
 //}
-int DatabaseWorker::insertPhoto(
-        PhotoRecord &photo)
+int DatabaseWorker::insertPhoto(PhotoRecord &photo)
 {
     QSqlQuery query(db);
 
@@ -211,14 +186,14 @@ int DatabaseWorker::insertPhoto(
 
     photo.id=query.value(0).toInt();
 
-    FileKey key;
+ //   FileKey key;
+//
+//    key.path=photo.path;
+//    key.file=photo.file;
+//    key.size=photo.fileSize;
+//    key.modified=photo.lastModified;
 
-    key.path=photo.path;
-    key.file=photo.file;
-    key.size=photo.fileSize;
-    key.modified=photo.lastModified;
-
-    m_cache->insert(key,photo.id);
+//    m_cache->insert(key,photo.id);
 
     return photo.id;
 }
@@ -282,7 +257,7 @@ void DatabaseWorker::commit()
     db.commit();
 }
 */
-QList<PhotoRecord> DatabaseWorker::getPhotosWithoutThumbnail(const QString &rootFolder)
+QList<PhotoRecord> DatabaseWorker::getPhotosWithoutThumbnail(const QString &media,const QString &rootFolder)
 {
     QString rootString=QDir::fromNativeSeparators(rootFolder);
     rootString.replace(QRegularExpression("^[a-zA-Z]:"), "");
@@ -296,8 +271,9 @@ QList<PhotoRecord> DatabaseWorker::getPhotosWithoutThumbnail(const QString &root
     QList<PhotoRecord> list;
 
     QSqlQuery query(db);
-    query.prepare(R"(SELECT id,path,file FROM photobase.photo_images WHERE path LIKE :path AND NOT EXISTS (SELECT 1 FROM photobase.photo_thumbnails WHERE photo_id = photo_images.id) ORDER BY path, file)");
+    query.prepare(R"(SELECT id,path,file,ext FROM photobase.photo_images WHERE media_name=:media_name and path LIKE :path AND NOT EXISTS (SELECT 1 FROM photobase.photo_thumbnails WHERE photo_id = photo_images.id) ORDER BY path, file)");
 
+    query.bindValue(":media_name", media);
     query.bindValue(":path", rootString + "%");
 
     if (!query.exec())
@@ -313,6 +289,7 @@ QList<PhotoRecord> DatabaseWorker::getPhotosWithoutThumbnail(const QString &root
         photo.id   = query.value(0).toInt();
         photo.path = query.value(1).toString();
         photo.file = query.value(2).toString();
+        photo.extension = query.value(3).toString();
 
         QString fPath=QDir::toNativeSeparators(driveLetter+photo.path + "/" + photo.file);
         photo.fullPath = fPath;

@@ -16,12 +16,13 @@ public:
     explicit DatabaseWorker(QObject *parent = nullptr);
     ~DatabaseWorker();
 
-    QList<PhotoRecord> getPhotosWithoutThumbnail(const QString &rootFolder);
+    QList<PhotoRecord> getPhotosWithoutThumbnail(const QString &media,const QString &rootFolder);
 //    QList<PhotoRecord> loadPhotoTree();
     int insertPhoto(PhotoRecord &photo);
     bool updateExif(const PhotoRecord &photo);
     bool updateMD5(const PhotoRecord &photo);
     bool insertThumbnail(const PhotoRecord &photo);
+    void loadCache(const QString &media,const QString &path,FileCache* m_cache);
 
 public slots:
     void open(SettingsManager *rpSettings) override;
@@ -32,19 +33,12 @@ public slots:
     void close();
 
 //    bool exists(const FileKey &key);
-
-
 //    void beginTransaction();
 //    void commit();
-//    void open(const QString &host,int port,const QString &database,const QString &user,const QString &password);
-//    void loadPhotoTreeAsync();
-//    void loadPhoto(int id);
 
 private:
 
     QSqlDatabase db;
-//    bool connectDatabase();
-    void loadCache();
-    FileCache* m_cache;    
+       
    
 };

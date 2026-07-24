@@ -1,11 +1,41 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(PhotoDB)
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_DISABLE_FIND_PACKAGE_WrapVulkanHeaders TRUE)
+
+include(FetchContent)
+
+FetchContent_Declare(
+    tinyxml2
+    GIT_REPOSITORY https://github.com/leethomason/tinyxml2.git
+    GIT_TAG 10.0.0
+)
+FetchContent_MakeAvailable(tinyxml2)
+set(BUILD_DEMO OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    TinyEXIF
+    GIT_REPOSITORY https://github.com/cdcseacave/TinyEXIF.git
+    GIT_TAG master
+)
+FetchContent_GetProperties(tinyexif)
+if(NOT tinyexif_POPULATED)
+    FetchContent_Populate(tinyexif)
+endif()
+
+add_library(TinyEXIF STATIC
+    ${tinyexif_SOURCE_DIR}/TinyEXIF.cpp
+    ${tinyexif_SOURCE_DIR}/TinyEXIF.h
+)
+target_include_directories(TinyEXIF PUBLIC ${tinyexif_SOURCE_DIR})
+if(TARGET tinyxml2)
+    target_link_libraries(TinyEXIF PUBLIC tinyxml2)
+else()
+    target_link_libraries(TinyEXIF PUBLIC tinyxml2_static)
+endif()
+
 set(SOURCES
 
     ScannerController.cpp
@@ -30,12 +60,6 @@ set(SOURCES
 
     settingsmanager.cpp
     settingsmanager.h
-
-    exif/TinyEXIF.cpp
-    exif/TinyEXIF.h
-
-    exif/tinyxml2.cpp
-    exif/tinyxml2.h
 
     FileKey.h
     PhotoRecord.h
@@ -68,4 +92,5 @@ target_link_libraries(PhotoDB PRIVATE
     Qt6::QuickControls2
     Qt6::Sql
     Qt6::Network
+    TinyEXIF
 )

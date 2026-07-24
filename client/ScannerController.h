@@ -43,7 +43,6 @@ private slots:
     void photosLoaded(QList<PhotoRecord> photos);
     void photoLoaded(PhotoRecord photo);
     
-//    void status(QString message);
 //    void progressChanged(int value);
 //    void finished();
     void databaseConnected(bool ok);

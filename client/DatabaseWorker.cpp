@@ -27,25 +27,29 @@ void DatabaseWorker::open(SettingsManager *rpSettings)
     QString connectionName ="PhotoDB_connection";
     if(QSqlDatabase::contains(connectionName)){
         db =QSqlDatabase::database(connectionName);
+        db.close();
     }
     else{
         db =QSqlDatabase::addDatabase("QPSQL",connectionName);
-        db.setHostName(rpSettings->dbHost());
-        db.setPort(rpSettings->dbPort());
-        db.setDatabaseName(rpSettings->dbName());
-        db.setUserName(rpSettings->dbUser());
-        db.setPassword(rpSettings->dbPassword());
-        if (db.open()) {
-            emit connected(true);
+    }
+    db.setHostName(rpSettings->dbHost());
+    db.setPort(rpSettings->dbPort());
+    db.setDatabaseName(rpSettings->dbName());
+    db.setUserName(rpSettings->dbUser());
+    db.setPassword(rpSettings->dbPassword());
+    if (db.open()) {
             emit status("PostgreSQL connected");
-        }
-        else{
-            emit connected(false);
+            emit connected(true);
+    }
+    else{
             emit error(db.lastError().text());
             qDebug()<<"Ошибка подключения :"<<db.lastError().text();
-        }
+            emit connected(false);
+    }
 //    loadCache();
-    }   
+
+
+           
 }
 
 
@@ -79,14 +83,14 @@ void DatabaseWorker::loadMedia()
 {
     QSqlQuery query(db);
     QStringList media;
-    query.prepare(R"(SELECT DISTINCT media_name FROM photobase.photo_images ORDER BY media_name)");
-    if(query.exec()){
+    if(query.exec(R"(SELECT DISTINCT media_name FROM photobase.photo_images ORDER BY media_name)")){
         while(query.next()){
             media.append(query.value(0).toString());
         }
         emit mediaLoaded(media);
     }
     else{
+        qDebug()<<"Ошибка запроса :"<<query.lastError().text();
         emit error(query.lastError().text());
     }
 }

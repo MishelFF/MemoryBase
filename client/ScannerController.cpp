@@ -1,6 +1,7 @@
 #include <QFileInfo>
 #include <QMetaObject>
 #include <QDebug>
+#include <QTimer>
 #include "ImportTask.h"
 #include "DatabaseWorker.h"
 #include "PhotoTreeModel.h"
@@ -10,6 +11,7 @@ ScannerController::ScannerController(PhotoRepository *repository,SettingsManager
 QObject(parent), m_repository(repository),m_settings(settings)
 {
     m_photoTree = new PhotoTreeModel(this);
+    qDebug() << "Connecting repository:" << m_repository;
     connect(m_repository,&PhotoRepository::mediaLoaded,this,&ScannerController::mediaLoaded);
     connect(m_repository,&PhotoRepository::foldersLoaded,this,&ScannerController::foldersLoaded);
     connect(m_repository,&PhotoRepository::photosLoaded,this,&ScannerController::photosLoaded);
@@ -22,7 +24,9 @@ QObject(parent), m_repository(repository),m_settings(settings)
     connect(m_photoTree,&PhotoTreeModel::requestPhotos,this,&ScannerController::loadPhotos);
     connect(m_settings,&SettingsManager::settingsSaved,this,&ScannerController::reConnected);
     //emit connectrepository(m_settings);
-    reConnected();
+    QTimer::singleShot(0, this, [this](){
+        this->reConnected(); 
+    });
 }
 /*ScannerController::ScannerController(QObject *parent)
     : QObject(parent)

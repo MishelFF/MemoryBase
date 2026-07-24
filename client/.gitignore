@@ -1,0 +1,33 @@
+# CMake build artifacts
+build/
+build-*/
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+Makefile
+*.cmake
+**/*.json
+.clang-format
+!CMakeLists.txt
+
+# Qt Creator
+*.autosave
+*.pro.user
+*.pro.user.*
+
+# IDE
+**/.vscode/
+**/.gigacode/
+**/*.iml
+
+# Qt generated
+**/*_qmlcache.qrc
+**/.qmake.stash
+
+# OS
+**/.DS_Store
+**/Thumbs.db
+
+# --- Секреты (на всякий случай, если где-то появятся) ---
+**/*.ini
+**/secrets.h

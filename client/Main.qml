@@ -37,7 +37,6 @@ ApplicationWindow {
     }
     Connections {
         target: scannerController 
-
         function onStatus(message)
         {
             console.log(message)
@@ -199,7 +198,7 @@ ApplicationWindow {
             Label
             {
                 id: statusText
-                text: "Готов"
+                text: "Не подключен"
             }
         }
     }

@@ -1,0 +1,41 @@
+# CMake build artifacts
+build/
+build-*/
+client/build/
+client/build-*/
+client/CMakeCache.txt
+client/CMakeFiles/
+client/CMakeUserPresets.json
+client/Makefile
+client/*.cmake
+client/**/*.json
+client/.clang-format
+!client/CMakeLists.txt
+
+# Qt Creator
+client/*.autosave
+client/*.pro.user
+client/*.pro.user.*
+
+# IDE
+**/.vscode/
+**/.gigacode/
+**/*.iml
+
+# Qt generated
+**/*_qmlcache.qrc
+**/.qmake.stash
+
+# OS
+**/.DS_Store
+**/Thumbs.db
+
+# --- PHP / сервер ---
+server/config.php
+server/.env
+server/vendor/
+**/*.log
+
+# --- Секреты (на всякий случай, если где-то появятся) ---
+**/*.ini
+**/secrets.h

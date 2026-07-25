@@ -3,6 +3,8 @@
 #include <QDebug>
 #include <QTimer>
 #include <QImageReader>
+#include <QDir>
+
 #include "ImportTask.h"
 #include "DatabaseWorker.h"
 #include "PhotoTreeModel.h"
@@ -131,7 +133,7 @@ void ScannerController::reConnected()
 }
 
 
-void ScannerController::scanFolder(const QString &media,const QString &folder)
+void ScannerController::scanFolder(const QString &media, const QString &mountPoint,const QString &folder)
 {
     // Импорт с диска поддерживается только для локальной БД
     auto *dbWorker = qobject_cast<DatabaseWorker*>(m_repository);
@@ -139,12 +141,16 @@ void ScannerController::scanFolder(const QString &media,const QString &folder)
         emit status("Импорт с диска недоступен в режиме API");
         return;
     }
-
+    QMetaObject::invokeMethod(dbWorker, [dbWorker, media, mountPoint](){dbWorker->saveMountPoint(media, mountPoint);}, Qt::QueuedConnection);
+    
     emit importRunningChanged();
     m_importRunning = true;
 
-    QMetaObject::invokeMethod(m_repository, [this, media,folder,dbWorker](){
-        dbWorker->loadCache(media,folder, &(this->m_cache));
+    QDir mountDir(mountPoint);
+    QString folderRelative = mountDir.relativeFilePath(QDir::fromNativeSeparators(folder));
+    QString cachePathFilter = (folderRelative.isEmpty() || folderRelative == ".")? "/" : "/" + folderRelative;
+    QMetaObject::invokeMethod(m_repository, [this, media,cachePathFilter,dbWorker](){
+        dbWorker->loadCache(media,cachePathFilter, &(this->m_cache));
     },  Qt::BlockingQueuedConnection);
     QStringList filters;
     //filters << "*.jpg" << "*.jpeg" << "*.png" << "*.bmp"<< "*.tif" << "*.tiff" << "*.webp"<<"*.gif"<<"*.wmf";
@@ -157,23 +163,27 @@ void ScannerController::scanFolder(const QString &media,const QString &folder)
     m_totalFiles = filenames.size();
     m_processedFiles.storeRelaxed(0);
     m_reportInterval = qMax(1, m_totalFiles / 200);
-
+    
     int index = 0;int existCount=0;
     for (const QString &filename : filenames) {
         QFileInfo info(filename);
+        QString relativeDir = mountDir.relativeFilePath(info.absolutePath());
+        QString normalizedPath = (relativeDir.isEmpty() || relativeDir == ".") ? "/" : "/" + relativeDir;
+
         FileKey key;
-        key.path = info.absolutePath();//убрать букву 
+        key.path = normalizedPath;//убрать букву - переделано
         key.file = info.fileName();
         key.size = info.size();        
         key.modified = info.lastModified();
         if (!m_cache.contains(key)) {
             PhotoRecord photo;
             photo.file = info.fileName();
-            photo.path = QDir::fromNativeSeparators(info.absolutePath());
+            photo.path = normalizedPath;;
             photo.fullPath = filename;
             photo.fileSize = info.size();
             photo.lastModified = info.lastModified();
             photo.extension = info.suffix().toLower();
+            photo.mediaName = media; 
             bool shouldReport = (index % m_reportInterval == 0) || (index == m_totalFiles - 1);
             enqueueImport(photo, shouldReport);
         } 
@@ -181,7 +191,7 @@ void ScannerController::scanFolder(const QString &media,const QString &folder)
         ++index;
     }
     emit importProgressChanged();
-    emit status(QString("Добавлено файлов: %1 уже существуют загружены %2").arg(m_totalFiles,existCount));
+    emit status(QString("Добавлено файлов: %1, уже загружены: %2").arg(m_totalFiles).arg(existCount));
 }
 
 
@@ -214,7 +224,7 @@ bool isSupportedImage(const PhotoRecord &photo)
     return true;
 }
 
-void ScannerController::generateMissingThumbnails(const QString &media,const QString &rootFolder) {
+void ScannerController::generateMissingThumbnails(const QString &media, const QString &mountPoint,const QString &rootFolder) {
     
     // Импорт с диска поддерживается только для локальной БД
     auto *dbWorker = qobject_cast<DatabaseWorker*>(m_repository);
@@ -224,8 +234,7 @@ void ScannerController::generateMissingThumbnails(const QString &media,const QSt
     }
     QList<PhotoRecord> photos;
 
-    QMetaObject::invokeMethod(dbWorker, [&]() { photos = dbWorker->getPhotosWithoutThumbnail(media,rootFolder); }, Qt::BlockingQueuedConnection); 
-    
+    QMetaObject::invokeMethod(dbWorker, [&](){ photos = dbWorker->getPhotosWithoutThumbnail(media, mountPoint, rootFolder);}, Qt::BlockingQueuedConnection); 
     QList<PhotoRecord> imagePhotos;
     imagePhotos.reserve(photos.size());
     int skipped = 0;
@@ -236,7 +245,7 @@ void ScannerController::generateMissingThumbnails(const QString &media,const QSt
             ++skipped;
     }
 
-    m_totalFiles = photos.size();
+    m_totalFiles = photos.size()-skipped;
     m_processedFiles = 0;
     m_importRunning = !photos.isEmpty();
     emit importRunningChanged();
@@ -251,18 +260,24 @@ void ScannerController::generateMissingThumbnails(const QString &media,const QSt
         ++index;
     }
 }
+
 void ScannerController::onFileProcessed()
 {
     emit importProgressChanged();
+//    qDebug()<<QString("Change progress on form %1").arg(m_processedFiles.loadRelaxed());
     if (m_processedFiles.loadRelaxed() >= m_totalFiles) {
         m_importRunning = false;
         emit importRunningChanged();
-        emit status("Импорт завершён");
+        if (!m_missingFiles.isEmpty())
+            emit status(QString("Проверка завершена. найдено отсутствие %1 файлов").arg(m_missingFiles.size()));
+        else
+            emit status("Обработка завершена");
     }
 }
 void ScannerController::incrementProcessed()
 {
     m_processedFiles.fetchAndAddRelaxed(1);
+//    qDebug()<<QString("Iterate progress counter %1").arg(m_processedFiles.loadRelaxed());
 }
 void ScannerController::databaseConnected(bool ok)
 {
@@ -278,4 +293,77 @@ void ScannerController::photoTreeLoaded(const QList<PhotoRecord> &photos)
     if (!m_photoTree) return;
 //    m_photoTree->buildTree(photos);
     emit status(QString("Photo tree loaded: %1 files").arg(photos.size()));
+}
+
+QVariantList ScannerController::photoInfo() const 
+{
+    QVariantList list;
+    auto addRow = [&list](const QString &label, const QVariant &value) {
+        QVariantMap row;
+        row["label"] = label;
+        row["value"] = value.toString();
+        list.append(row);
+    };
+    addRow("Имя", m_selectedPhoto.file);
+    addRow("Дата", m_selectedPhoto.dateCreation.toString("dd.MM.yyyy hh:mm"));
+    addRow("Размер", QString("%1 КБ").arg(m_selectedPhoto.fileSize / 1024));
+    addRow("Камера", m_selectedPhoto.device);
+    addRow("Производитель", m_selectedPhoto.maker);
+    addRow("Ширина", m_selectedPhoto.width > 0 ? QString::number(m_selectedPhoto.width) : "");
+    addRow("Высота", m_selectedPhoto.height > 0 ? QString::number(m_selectedPhoto.height) : "");
+    addRow("MD5", m_selectedPhoto.md5);
+    addRow("GPS", (m_selectedPhoto.latitude != 0 || m_selectedPhoto.longitude != 0)?QString("%1, %2").arg(m_selectedPhoto.latitude, 0, 'f', 6).arg(m_selectedPhoto.longitude, 0, 'f', 6):"");
+    return list;
+}
+QString ScannerController::mountPointFor(const QString &media) const
+{
+    for (const QVariant &v : m_mediaMounts) {
+        QVariantMap m = v.toMap();
+        if (m["media"].toString() == media)
+            return m["mountPoint"].toString();
+    }
+    return QString();
+}
+void ScannerController::findMissingFiles(const QString &media, const QString &mountPoint, const QString &folder)
+{
+    auto *dbWorker = qobject_cast<DatabaseWorker*>(m_repository);
+    if (!dbWorker) {
+        emit status("Недоступно в режиме API");
+        return;
+    }
+
+    QDir mountDir(mountPoint);
+    QString relative = mountDir.relativeFilePath(QDir::fromNativeSeparators(folder));
+    QString relPath = (relative.isEmpty() || relative == ".") ? "/" : "/" + relative;
+
+    QList<PhotoRecord> entries;
+    QMetaObject::invokeMethod(dbWorker, [&](){entries = dbWorker->loadPathEntries(media, relPath);}, Qt::BlockingQueuedConnection);
+
+    m_missingFiles.clear();
+    emit missingFilesChanged();
+
+    m_totalFiles = entries.size();
+    m_processedFiles.storeRelaxed(0);
+    m_reportInterval = qMax(1, m_totalFiles / 200);
+    m_importRunning = !entries.isEmpty();
+    emit importRunningChanged();
+    emit importProgressChanged();
+    emit status(QString("Проверка %1 записей на наличие файлов...").arg(entries.size()));
+
+    int index = 0;
+    for (const PhotoRecord &entry : entries) {
+        bool shouldReport = (index % m_reportInterval == 0) || (index == m_totalFiles - 1);
+        m_pool.start(new MissingFileTask(entry, mountPoint, dbWorker, this, shouldReport));
+        ++index;
+    }
+}
+
+void ScannerController::missingFileFound(int id, const QString &path, const QString &file)
+{
+    QVariantMap row;
+    row["id"] = id;
+    row["path"] = path;
+    row["file"] = file;
+    m_missingFiles.append(row);
+    emit missingFilesChanged();
 }

@@ -20,7 +20,8 @@ public slots:
     void loadFolders(const QString &mediaName) override;
     void loadPhotos(const QString &mediaName, const QString &path) override;
     void loadPhoto(int id) override;
-
+    void loadMediaMounts() override;
+    void saveMountPoint(const QString &media, const QString &mountPoint) override;
 private:
 
     QNetworkAccessManager *manager;

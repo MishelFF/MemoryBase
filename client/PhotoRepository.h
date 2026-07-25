@@ -22,6 +22,8 @@ public slots:
     virtual void loadFolders(const QString &mediaName) = 0;
     virtual void loadPhotos(const QString &mediaName,const QString &path) = 0;
     virtual void loadPhoto(int id) = 0;
+    virtual void loadMediaMounts() = 0;                                          
+    virtual void saveMountPoint(const QString &media, const QString &mountPoint) = 0;  
 
 signals:
 
@@ -32,4 +34,5 @@ signals:
     void photoLoaded(PhotoRecord photo);
     void error(QString message);
     void status(QString);
+    void mediaMountsLoaded(QVariantList mounts);   
 };

@@ -26,13 +26,10 @@ ApplicationWindow {
     }
 
     FolderDialog {
-
         id:dlg
-
         onAccepted:
         {
             let rawUrl = dlg.selectedFolder || dlg.folder;
-
             if (rawUrl) {
                 let urlString = Qt.resolvedUrl(rawUrl).toString();
                 if (urlString && urlString !== "undefined") {
@@ -41,9 +38,18 @@ ApplicationWindow {
                     statusText.text = rootFolder;
                 }
             }
-
         }
     }
+    FolderDialog {
+    id: mountDlg
+    onAccepted: {
+        let rawUrl = mountDlg.selectedFolder || mountDlg.folder
+        if (rawUrl) {
+            let urlString = Qt.resolvedUrl(rawUrl).toString()
+            mountPointField.text = urlString.replace(/^file:\/\/\/?/, "")
+        }
+    }
+}
     Connections {
         target: scannerController 
         function onStatus(message)
@@ -91,6 +97,14 @@ ApplicationWindow {
                 enabled: rootFolder !== ""
                 onTriggered:{
                     pendingAction = "thumbnails"
+                    importPanelVisible = true
+                }
+            }
+            MenuItem {
+                text: "Проверить отсутствующие файлы"
+                enabled: rootFolder !== ""
+                onTriggered: {
+                    pendingAction = "missing"
                     importPanelVisible = true
                 }
             }
@@ -165,35 +179,50 @@ ApplicationWindow {
                         fillMode: Image.PreserveAspectFit
                         source: scannerController.thumbnailSource
                     }
-                    Rectangle
-                    {
+                    Rectangle {
                         Layout.fillWidth: true
                         height: 1
                         color: "#808080"
                     }
-                    GridLayout
-                    {
-                        columns: 2
-                        columnSpacing: 10
-                        rowSpacing: 6
-                        Label { text: "Имя" }
-                        Label { text: "" }
-                        Label { text: "Дата" }
-                        Label { text: "" }
-                        Label { text: "Размер" }
-                        Label { text: "" }
-                        Label { text: "Камера" }
-                        Label { text: "" }
-                        Label { text: "Производитель" }
-                        Label { text: "" }
-                        Label { text: "Ширина" }
-                        Label { text: "" }
-                        Label { text: "Высота" }
-                        Label { text: "" }
-                        Label { text: "MD5" }
-                        Label { text: "" }
-                        Label { text: "GPS" }
-                        Label { text: "" }
+                    ScrollView {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 70
+                        clip: true
+                        ScrollBar.horizontal.policy: ScrollBar.AsNeeded
+                        ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+                        RowLayout {
+                            height: parent.height
+                            spacing: 0
+                            Repeater {
+                                model: scannerController.photoInfo
+                                delegate: Rectangle {
+                                    Layout.fillHeight: true
+                                    Layout.preferredWidth: 130
+                                    color: index % 2 === 0 ? "#f5f5f5" : "transparent"
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 6
+                                        spacing: 2
+                                        Label {
+                                            text: modelData.label
+                                            font.pointSize: 8
+                                            color: "#606060"
+                                            Layout.fillWidth: true
+                                        }
+                                        Label {
+                                            text: modelData.value
+                                            font.pointSize: 9
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: modelData.value
+                                            HoverHandler { id: hoverHandler }
+                                            property bool hovered: hoverHandler.hovered
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 ColumnLayout {
@@ -201,27 +230,55 @@ ApplicationWindow {
                     Layout.margins: 20
                     Label {
                         text: pendingAction === "scan"
-                          ? "Импорт новых файлов"
-                          : "Создание миниатюр"
+                              ? "Импорт новых файлов"
+                              : pendingAction === "thumbnails"
+                              ? "Создание миниатюр"
+                              : "Проверка отсутствующих файлов"
                         font.bold: true
                         font.pointSize: 14
                     }
                     Label { text: "Имя носителя (media):" }
-                    TextField {
+                    ComboBox {
                         id: mediaNameField
+                        editable: true
                         Layout.fillWidth: true
+                        model: scannerController.knownMedia
                         enabled: !scannerController.importRunning
+                        onEditTextChanged: {
+                            let mp = scannerController.mountPointFor(editText)
+                            if (mp !== "")
+                                mountPointField.text = mp
+                        }
                     }
-
+                    Label { text: "Точка монтирования (корень носителя):" }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        TextField {
+                            id: mountPointField
+                            Layout.fillWidth: true
+                            enabled: !scannerController.importRunning
+                            placeholderText: "например, D:/ или /media/Disk0"
+                        }
+                        Button {
+                            text: "..."
+                            enabled: !scannerController.importRunning
+                            onClicked: mountDlg.open()
+                        }
+                    }
                     RowLayout {
                         Button {
                             text: "Начать"
-                            enabled: mediaNameField.text.trim() !== "" && !scannerController.importRunning
+                            enabled: mediaNameField.editText.trim() !== ""
+                                && mountPointField.text.trim() !== ""
+                                && !scannerController.importRunning
                             onClicked: {
                                 if (pendingAction === "scan")
-                                    scannerController.scanFolder(mediaNameField.text, rootFolder)
-                                else
-                                    scannerController.generateMissingThumbnails(mediaNameField.text, rootFolder)
+                                    scannerController.scanFolder(mediaNameField.editText, mountPointField.text, rootFolder)
+                                else if (pendingAction === "thumbnails")
+                                    scannerController.generateMissingThumbnails(mediaNameField.editText, mountPointField.text, rootFolder)
+                                else if (pendingAction === "missing")
+                                    scannerController.findMissingFiles(mediaNameField.editText, mountPointField.text, rootFolder)
+    
                             }
                         }
                         Button {
@@ -229,6 +286,7 @@ ApplicationWindow {
                             enabled: !scannerController.importRunning
                             onClicked: importPanelVisible = false
                         }
+                          
                     }
                     ProgressBar {
                         Layout.fillWidth: true
@@ -243,6 +301,49 @@ ApplicationWindow {
                           ? "Обработано: %1 / %2".arg(scannerController.importProcessed).arg(scannerController.importTotal)
                           : ""
                     }
+ScrollView {
+    Layout.fillWidth: true
+    Layout.preferredHeight: 150
+    clip: true
+    visible: pendingAction === "missing" && scannerController.missingFiles.length > 0
+
+    ColumnLayout {
+        width: parent.width
+        spacing: 0
+
+        Repeater {
+            model: scannerController.missingFiles
+
+            delegate: Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 24
+                color: index % 2 === 0 ? "#f5f5f5" : "transparent"
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 6
+                    anchors.rightMargin: 6
+                    spacing: 8
+
+                    Label {
+                        text: modelData.path
+                        font.pointSize: 8
+                        color: "#606060"
+                        elide: Text.ElideLeft
+                        Layout.preferredWidth: 160
+                    }
+                    Label {
+                        text: modelData.file
+                        font.pointSize: 8
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                }
+            }
+        }
+    }
+}
+
                     Item { Layout.fillHeight: true }  // прижимает контент к верху
                 }
             }

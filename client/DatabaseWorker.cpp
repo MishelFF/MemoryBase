@@ -127,7 +127,7 @@ void DatabaseWorker::loadPhotos(const QString &mediaName,const QString &path)
 
 
 
-void DatabaseWorker::loadCache(const QString &media,const QString &path,FileCache* m_cache)
+void DatabaseWorker::loadCache(const QString &media,const QString &relativePath,FileCache* m_cache)
 {
     if(!m_cache) return;
     m_cache->clear();
@@ -135,13 +135,14 @@ void DatabaseWorker::loadCache(const QString &media,const QString &path,FileCach
     QSqlQuery query(db);
 //    QString safeLabel = QString("'"  media "'");
 //    QString rawSql = QString( "SELECT id, path, file, filesize, lastmodified FROM photobase.photo_images WHERE media_name = %1").arg(safeLabel);
-    query.prepare(R"(SELECT id,path,file,filesize,lastmodified FROM photo_images WHERE media_name=:media_label and path like :path)");
+    query.prepare(R"(SELECT id,path,file,filesize,lastmodified FROM photobase.photo_images WHERE media_name=:media_label and path like :path)");
     query.bindValue(":media_label",media);
-    query.bindValue(":path",media + "%");
+    query.bindValue(":path",relativePath + "%");
     if(!query.exec())
     {
         qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit status(query.lastError().text());
+        return; 
     }
 
     while(query.next())
@@ -257,46 +258,40 @@ void DatabaseWorker::commit()
     db.commit();
 }
 */
-QList<PhotoRecord> DatabaseWorker::getPhotosWithoutThumbnail(const QString &media,const QString &rootFolder)
+
+QList<PhotoRecord> DatabaseWorker::getPhotosWithoutThumbnail(const QString &media, const QString &mountPoint, const QString &rootFolder)
 {
-    QString rootString=QDir::fromNativeSeparators(rootFolder);
-    rootString.replace(QRegularExpression("^[a-zA-Z]:"), "");
-    QRegularExpression driveRegex("^([a-zA-Z]:)");
-    QRegularExpressionMatch match = driveRegex.match(rootFolder);
-    QString driveLetter = "";
-    if (match.hasMatch()) {
-        driveLetter = match.captured(1); // Запоминаем то, что попало в скобки (например, "D:")
-    }
-    
     QList<PhotoRecord> list;
 
+    // Переводим rootFolder в путь относительно точки монтирования 
+    QDir mountDir(mountPoint);
+    QString relative = mountDir.relativeFilePath(QDir::fromNativeSeparators(rootFolder));
+    QString pathPrefix = relative.isEmpty() || relative == "." ? "/" : "/" + relative;
+
     QSqlQuery query(db);
-    query.prepare(R"(SELECT id,path,file,ext FROM photobase.photo_images WHERE media_name=:media_name and path LIKE :path AND NOT EXISTS (SELECT 1 FROM photobase.photo_thumbnails WHERE photo_id = photo_images.id) ORDER BY path, file)");
+    query.prepare(R"(SELECT id, path, file, ext FROM photobase.photo_images WHERE media_name = :media_name AND path LIKE :path AND NOT EXISTS (
+                    SELECT 1 FROM photobase.photo_thumbnails WHERE photo_id = photo_images.id
+                    ) ORDER BY path, file)");
 
     query.bindValue(":media_name", media);
-    query.bindValue(":path", rootString + "%");
+    query.bindValue(":path", pathPrefix + "%");
 
-    if (!query.exec())
-    {
-        emit status(query.lastError().text());
+    if (!query.exec()) {
+        emit error(query.lastError().text());
         return list;
     }
 
     while (query.next())
     {
         PhotoRecord photo;
-
-        photo.id   = query.value(0).toInt();
+        photo.id = query.value(0).toInt();
         photo.path = query.value(1).toString();
         photo.file = query.value(2).toString();
         photo.extension = query.value(3).toString();
-
-        QString fPath=QDir::toNativeSeparators(driveLetter+photo.path + "/" + photo.file);
-        photo.fullPath = fPath;
-
+        photo.mediaName = media;
+        photo.fullPath = QDir::toNativeSeparators(QDir::cleanPath(mountPoint + "/" + photo.path + "/" + photo.file));
         list.append(photo);
     }
-
     return list;
 }
 
@@ -385,4 +380,86 @@ void DatabaseWorker::loadPhoto(int id)
         photo.thumbheight = thumbQuery.value("height").toInt();
     }
     emit photoLoaded(photo);
+}
+void DatabaseWorker::loadMediaMounts() {
+    QSqlQuery query(db);
+    query.prepare("SELECT media_name, mount_point FROM photobase.media_mounts ORDER BY media_name");
+    if (!query.exec()) { emit error(query.lastError().text());return;}
+    QVariantList result;
+    while (query.next()) {
+        QVariantMap row;
+        row["media"] = query.value(0).toString();
+        row["mountPoint"] = query.value(1).toString();
+        result.append(row);
+    }
+    emit mediaMountsLoaded(result);
+}
+void DatabaseWorker::saveMountPoint(const QString &media, const QString &mountPoint) {
+    QSqlQuery query(db);
+    query.prepare("INSERT INTO photobase.media_mounts (media_name, mount_point) VALUES (:media, :mount) ON CONFLICT (media_name) DO UPDATE SET mount_point = :mount");
+    query.bindValue(":media", media);
+    query.bindValue(":mount", mountPoint);
+    if (!query.exec()) {
+        emit error(query.lastError().text());
+        return;
+    }
+    emit status(QString("Точка монтирования для %1 сохранена").arg(media));
+}
+void DatabaseWorker::markMissing(int id)
+{
+    QSqlQuery query(db);
+    // WHERE missing_since IS NULL — не перезатираем дату первого обнаружения при повторных проверках
+    query.prepare("UPDATE photobase.photo_images SET missing_since = now() WHERE id = :id AND missing_since IS NULL");
+    query.bindValue(":id", id);
+    if (!query.exec())
+        emit error(query.lastError().text());
+}
+
+void DatabaseWorker::clearMissing(int id)
+{
+    QSqlQuery query(db);
+    query.prepare("UPDATE photobase.photo_images SET missing_since = NULL WHERE id = :id AND missing_since IS NOT NULL");
+    query.bindValue(":id", id);
+    if (!query.exec())
+        emit error(query.lastError().text());
+}
+
+QList<PhotoRecord> DatabaseWorker::loadPathEntries(const QString &media, const QString &relativePath)
+{
+    QList<PhotoRecord> list;
+
+    QSqlQuery query(db);
+    query.prepare(R"(SELECT id, path, file FROM photobase.photo_images WHERE media_name = :media AND path LIKE :path)");
+    query.bindValue(":media", media);
+    query.bindValue(":path", relativePath + "%");
+
+    if (!query.exec()) {
+        emit error(query.lastError().text());
+        return list;
+    }
+
+    while (query.next()) {
+        PhotoRecord photo;
+        photo.id = query.value(0).toInt();
+        photo.path = query.value(1).toString();
+        photo.file = query.value(2).toString();
+        list.append(photo);
+    }
+    return list;
+}
+QSet<int> DatabaseWorker::loadMissingIds(const QString &media, const QString &relativePath)
+{
+    QSet<int> ids;
+    QSqlQuery query(db);
+    query.prepare(R"(SELECT id FROM photobase.photo_images WHERE media_name = :media AND path LIKE :path AND missing_since IS NOT NULL)");
+    query.bindValue(":media", media);
+    query.bindValue(":path", relativePath + "%");
+
+    if (!query.exec()) {
+        emit error(query.lastError().text());
+        return ids;
+    }
+    while (query.next())
+        ids.insert(query.value(0).toInt());
+    return ids;
 }

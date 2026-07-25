@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QDirIterator>
 #include <QAtomicInteger>
+#include <QVariantList>
 
 #include "PhotoRecord.h"
 #include "FileKey.h"
@@ -25,31 +26,40 @@ public:
     Q_PROPERTY(int importTotal READ importTotal NOTIFY importProgressChanged)
     Q_PROPERTY(int importProcessed READ importProcessed NOTIFY importProgressChanged)
     Q_PROPERTY(bool importRunning READ importRunning NOTIFY importRunningChanged)
+    Q_PROPERTY(QVariantList photoInfo READ photoInfo NOTIFY selectedPhotoChanged)
+    Q_PROPERTY(QVariantList missingFiles READ missingFiles NOTIFY missingFilesChanged)
 
     int importTotal() const { return m_totalFiles; }
     int importProcessed() const { return m_processedFiles.loadRelaxed(); }
     bool importRunning() const { return m_importRunning; }
+    Q_INVOKABLE QString mountPointFor(const QString &media) const;
+    QVariantList missingFiles() const { return m_missingFiles; }
 
     explicit ScannerController(PhotoRepository *repository,SettingsManager* settings,QObject *parent = nullptr);
     ~ScannerController();
 
     PhotoTreeModel* photoTree() const;
     QString thumbnailDataSource() const;
+    QVariantList photoInfo() const;
 public slots:
     void loadTree();
     void selectPhoto(int id);
     void loadMedia();
     void loadFolders(const QString &media);
     void loadPhotos(const QString &media,const QString &path);
-    void scanFolder(const QString &media,const QString &folder);
-    void generateMissingThumbnails(const QString &media,const QString &rootFolder);
+    void scanFolder(const QString &media, const QString &mountPoint, const QString &folder);
+    void generateMissingThumbnails(const QString &media, const QString &mountPoint,const QString &rootFolder);
     void onFileProcessed();
+    void incrementProcessed();
+    void findMissingFiles(const QString &media, const QString &mountPoint, const QString &folder);
+    void missingFileFound(int id, const QString &path, const QString &file);
 signals:
     void selectedPhotoChanged();
     void status(QString message);
     void connectrepository(SettingsManager*);
     void importProgressChanged();
     void importRunningChanged();
+    void missingFilesChanged();
 
 private slots:
     void databaseConnected(bool ok);
@@ -66,7 +76,6 @@ private slots:
 
 private:
     void enqueueImport(const PhotoRecord &photo, bool reportProgress);
-    void incrementProcessed();
 
     PhotoRepository *m_repository = nullptr;
     QThread *m_repositoryThread = nullptr;
@@ -82,4 +91,6 @@ private:
     int m_reportInterval = 1;  
     QAtomicInteger<int> m_processedFiles{0};
     bool m_importRunning = false;
+    QVariantList m_mediaMounts;
+    QVariantList m_missingFiles;
 };

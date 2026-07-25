@@ -31,6 +31,7 @@ struct PhotoRecord
 
     QDateTime dateCreation;
     QString mediaName;
+    QString comment;
     int rotation = 0;
 
     double latitude = 0;

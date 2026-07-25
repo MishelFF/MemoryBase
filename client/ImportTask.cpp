@@ -99,3 +99,58 @@ void ThumbnailTask::run() {
    if (m_reportProgress && m_controller)
         QMetaObject::invokeMethod(m_controller, "onFileProcessed", Qt::QueuedConnection);    
 }
+MissingFileTask::MissingFileTask(const PhotoRecord &photo, const QString &mountPoint,DatabaseWorker *database, ScannerController *controller, bool reportProgress)
+    : m_photo(photo), m_mountPoint(mountPoint), m_database(database),m_controller(controller), m_reportProgress(reportProgress)
+{    setAutoDelete(true);}
+
+void MissingFileTask::run()
+{
+    QString fullPath = QDir::cleanPath(m_mountPoint + "/" + m_photo.path + "/" + m_photo.file);
+    bool exists = QFileInfo::exists(fullPath);
+    int id = m_photo.id;
+
+    DatabaseWorker *database = m_database;   // ← локальная копия указателя, не через this
+    QMetaObject::invokeMethod(database, [database, id, exists](){
+        if (exists)
+            database->clearMissing(id);   
+        else
+            database->markMissing(id);    
+    }, Qt::QueuedConnection);
+
+    if (!exists && m_controller) 
+        QMetaObject::invokeMethod(m_controller, [photo = m_entry](){m_controller->missingFileFound(m_photo.id, m_photo.path, m_photo.file);}, Qt::QueuedConnection);
+    if (m_controller) 
+        QMetaObject::invokeMethod(m_controller, "incrementProcessed", Qt::QueuedConnection);
+    if (m_reportProgress)
+            QMetaObject::invokeMethod(m_controller, "onFileProcessed", Qt::QueuedConnection);
+    
+}
+void MissingFileTask::run()
+{
+    QString fullPath = QDir::cleanPath(m_mountPoint + "/" + m_photo.path + "/" + m_photo.file);
+    bool exists = QFileInfo::exists(fullPath);
+
+    // Копируем всё нужное в локальные переменные — не трогаем m_photo/this
+    // внутри отложенных (QueuedConnection) лямбд
+    int id = m_photo.id;
+    QString path = m_photo.path;
+    QString file = m_photo.file;
+    DatabaseWorker *database = m_database;
+
+    QMetaObject::invokeMethod(database, [database, id, exists](){
+        if (exists)
+            database->clearMissing(id);
+        else
+            database->markMissing(id);
+    }, Qt::QueuedConnection);
+
+    if (!exists && m_controller) {QMetaObject::invokeMethod(m_controller, [controller = m_controller, id, path, file]()
+        {controller->missingFileFound(id, path, file);}, Qt::QueuedConnection);
+    }
+
+    if (m_controller)
+        QMetaObject::invokeMethod(m_controller, "incrementProcessed", Qt::QueuedConnection);
+
+    if (m_reportProgress && m_controller)   // ← добавлена проверка
+        QMetaObject::invokeMethod(m_controller, "onFileProcessed", Qt::QueuedConnection);
+}

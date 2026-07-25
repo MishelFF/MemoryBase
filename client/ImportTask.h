@@ -51,3 +51,17 @@ class ThumbnailTask : public QRunnable {
     QPointer<ScannerController> m_controller;
     bool m_reportProgress;
 };
+class MissingFileTask : public QRunnable
+{
+public:
+    MissingFileTask(const PhotoRecord &entry, const QString &mountPoint,
+                     DatabaseWorker *database, ScannerController *controller, bool reportProgress);
+    void run() override;
+
+private:
+    PhotoRecord m_photo;
+    QString m_mountPoint;
+    DatabaseWorker *m_database;
+    QPointer<ScannerController> m_controller;
+    bool m_reportProgress;
+};

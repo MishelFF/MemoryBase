@@ -1,0 +1,17 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "linux",
+            "displayName": "Linux (system Qt6)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-linux"
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "linux-debug",
+            "configurePreset": "linux"
+        }
+    ]
+}

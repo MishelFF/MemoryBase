@@ -48,7 +48,7 @@ int main(int argc,char *argv[])
 
 
     
-    engine.loadFromModule("PhotoDB","Main");
+    engine.loadFromModule("PhotoDBQml","Main");
     if(engine.rootObjects().isEmpty()) 
             settingsManager.openSettingsRequested();
     

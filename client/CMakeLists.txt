@@ -82,7 +82,7 @@ qt_add_executable(PhotoDB
     ${SOURCES}
 )
 qt_add_qml_module(PhotoDB
-    URI PhotoDB
+    URI PhotoDBQml
     VERSION 1.0
     QML_FILES Main.qml SettingsDialog.qml
 )

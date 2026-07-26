@@ -10,7 +10,7 @@
 
 #include "PhotoRecord.h"
 #include "FileKey.h"
-#include "SettingsManager.h"
+#include "settingsmanager.h"
 
 class PhotoRepository;
 class PhotoTreeModel;

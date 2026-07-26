@@ -10,7 +10,7 @@
 #include <QFileInfo>
 
 #include "DatabaseWorker.h"
-#include "SettingsManager.h"
+#include "settingsmanager.h"
 
 DatabaseWorker::DatabaseWorker(QObject *parent) : PhotoRepository(parent)
 {

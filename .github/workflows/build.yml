@@ -16,9 +16,14 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v5
 
-      - name: List available Qt versions
+      - name: Install aqtinstall
         run: |
-          python -m aqt list-qt windows desktop      
+          python -m pip install --upgrade pip
+          python -m pip install aqtinstall
+
+      - name: List Qt versions
+        run: |
+          python -m aqt list-qt windows desktop          
           
       - name: Install Qt
         uses: jurplel/install-qt-action@v4

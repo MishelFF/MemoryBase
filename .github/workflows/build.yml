@@ -24,16 +24,19 @@ jobs:
           cache: true
 
       - name: Configure
+        working-directory: client
         run: cmake --preset windows-msvc
 
       - name: Build
+        working-directory: client
         run: cmake --build --preset windows-msvc-release
 
       - name: Install
+        working-directory: client
         run: cmake --install build/windows-msvc --config Release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: PhotoDB-windows
-          path: install/windows-msvc/**
+          path: install/client/windows-msvc/**

@@ -49,7 +49,7 @@ jobs:
           windeployqt `
             --release `
             --no-translations `
-            install/windows-msvc/PhotoDB.exe
+            install/windows-msvc/bin/PhotoDB.exe
 
       - name: Package
         working-directory: client

@@ -54,7 +54,7 @@ jobs:
       - name: Package
         working-directory: client
         run: |
-          cpack --config build/windows-msvc/CPackConfig.cmake -C Release
+          cpack --config build/windows-msvc/CPackConfig.cmake -C Release --package-directory build/windows-msvc
           
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

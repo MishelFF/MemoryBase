@@ -42,8 +42,8 @@
                 "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}",
                 "CMAKE_C_COMPILER": "cl.exe",
                 "CMAKE_CXX_COMPILER": "cl.exe"
-            },
-            "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}"
+            }
+           
         },
         {
             "name": "windows-msvc",

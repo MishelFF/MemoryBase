@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(PhotoDB)
+project(PhotoDB VERSION 1.0.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -96,21 +96,17 @@ target_link_libraries(PhotoDB PRIVATE
 )
 include(GNUInstallDirs)
 
-install(TARGETS PhotoDB
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}   
-)
+install(TARGETS PhotoDB RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-install(FILES
-    Main.qml
-    SettingsDialog.qml
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/PhotoDB/qml
-)
+install(FILES Main.qml SettingsDialog.qml DESTINATION ${CMAKE_INSTALL_DATADIR}/PhotoDB/qml)
 
 include(InstallRequiredSystemLibraries)
 
 set(CPACK_PACKAGE_NAME "PhotoDB")
 set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
-set(CPACK_GENERATOR "ZIP")    
-# set(CPACK_GENERATOR "TGZ")  
+set(CPACK_PACKAGE_FILE_NAME "PhotoDB-${PROJECT_VERSION}-win64")
+set(CPACK_GENERATOR "ZIP")
+
+set(CPACK_INSTALLED_DIRECTORIES "${CMAKE_INSTALL_PREFIX};/")
 
 include(CPack)

@@ -2,38 +2,79 @@
     "version": 6,
     "configurePresets": [
         {
-            "name": "linux",
-            "displayName": "Linux (system Qt6)",
+            "name": "linux-base",
+            "hidden": true,
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build-linux"
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
         },
         {
-            "name": "Visual Studio Professional 2026 Release - amd64",
-            "displayName": "Visual Studio Professional 2026 Release - amd64",
-            "description": "Using compilers for Visual Studio 18 2026 (x64 architecture)",
-            "generator": "Visual Studio 18 2026",
-            "toolset": "host=x64",
-            "architecture": "x64",
-            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "name": "linux-debug",
+            "displayName": "Linux Debug (system Qt6)",
+            "inherits": "linux-base",
             "cacheVariables": {
-                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
-                "CMAKE_C_COMPILER": "cl.exe",
-                "CMAKE_CXX_COMPILER": "cl.exe",
-                "CMAKE_PREFIX_PATH": "C:/Qt/6.11.1/msvc2022_64",
                 "CMAKE_BUILD_TYPE": "Debug"
             }
+        },
+        {
+            "name": "linux-release",
+            "displayName": "Linux Release (system Qt6)",
+            "inherits": "linux-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "windows-msvc-base",
+            "hidden": true,
+            "generator": "Ninja Multi-Config",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
+            "cacheVariables": {
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}",
+                "CMAKE_C_COMPILER": "cl.exe",
+                "CMAKE_CXX_COMPILER": "cl.exe"
+            },
+            "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}"
+//            "environment": {
+//                "_comment": "Ninja не находит cl.exe сам — либо запускайте из Developer Command Prompt, либо пропишите здесь PATH/INCLUDE/LIB из vcvarsall.bat"
+            }
+        },
+        {
+            "name": "windows-msvc",
+            "displayName": "Windows (Ninja Multi-Config, MSVC amd64)",
+            "description": "Multi-config MSVC build via Ninja; Debug/Release chosen at build time. CMAKE_PREFIX_PATH (Qt) задаётся в CMakeUserPresets.json",
+            "inherits": "windows-msvc-base"
         }
     ],
     "buildPresets": [
         {
             "name": "linux-debug",
-            "configurePreset": "linux"
+            "configurePreset": "linux-debug"
         },
         {
-            "name": "Visual Studio Professional 2026 Release - amd64-debug",
-            "displayName": "Visual Studio Professional 2026 Release - amd64 - Debug",
-            "configurePreset": "Visual Studio Professional 2026 Release - amd64",
+            "name": "linux-release",
+            "configurePreset": "linux-release"
+        },
+        {
+            "name": "windows-msvc-debug",
+            "displayName": "Windows amd64 - Debug",
+            "configurePreset": "windows-msvc",
             "configuration": "Debug"
+        },
+        {
+            "name": "windows-msvc-release",
+            "displayName": "Windows amd64 - Release",
+            "configurePreset": "windows-msvc",
+            "configuration": "Release"
         }
     ]
 }

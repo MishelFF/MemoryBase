@@ -94,3 +94,23 @@ target_link_libraries(PhotoDB PRIVATE
     Qt6::Network
     TinyEXIF
 )
+include(GNUInstallDirs)
+
+install(TARGETS PhotoDB
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}   
+)
+
+install(FILES
+    Main.qml
+    SettingsDialog.qml
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/PhotoDB/qml
+)
+
+include(InstallRequiredSystemLibraries)
+
+set(CPACK_PACKAGE_NAME "PhotoDB")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_GENERATOR "ZIP")    
+# set(CPACK_GENERATOR "TGZ")  
+
+include(CPack)

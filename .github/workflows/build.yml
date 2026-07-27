@@ -41,6 +41,15 @@ jobs:
       - name: Install
         working-directory: client
         run: cmake --install build/windows-msvc --config Release
+        
+      - name: Deploy Qt
+        working-directory: client
+        shell: pwsh
+        run: |
+          windeployqt `
+            --release `
+            --no-translations `
+            install/windows-msvc/PhotoDB.exe
 
       - name: Package
         working-directory: client

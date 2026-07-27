@@ -60,4 +60,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PhotoDB-windows
-          path: client/build/windows-msvc/*.zip
+          path: client/*.zip

@@ -120,11 +120,13 @@ void PhotoTreeModel::expand(const QModelIndex &index)
 
 void PhotoTreeModel::addMedia(const QStringList &media)
 {
-    beginInsertRows(QModelIndex(),m_root->children.count(), m_root->children.count() + media.count() - 1);
-    for (const QString &name : media) {
-        auto *item = new PhotoTreeItem(PhotoTreeItem::Media,name,QString(),name,&childIndex,m_root);
+    if (media.count()>0){
+        beginInsertRows(QModelIndex(),m_root->children.count(), m_root->children.count() + media.count() - 1);
+        for (const QString &name : media) {
+            auto *item = new PhotoTreeItem(PhotoTreeItem::Media,name,QString(),name,&childIndex,m_root);
+        }
+        endInsertRows();
     }
-    endInsertRows();
 }
 void PhotoTreeModel::addFolders(const QString &media, const QStringList &folders) {
     

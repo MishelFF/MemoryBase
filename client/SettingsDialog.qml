@@ -52,7 +52,7 @@ Dialog {
             TextField { id: hostField; Layout.fillWidth: true }
 
             Label { text: "Порт:" }
-            SpinBox { id: portField; from: 1; to: 65535; value: 5432 }
+            SpinBox { id: portField; from: 1; to: 65535; value: 5432; editable: true }
 
             Label { text: "Имя БД:" }
             TextField { id: dbNameField; Layout.fillWidth: true }

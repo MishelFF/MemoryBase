@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: photouser
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: photobase
+    ports:
+      - "5432:5432" 
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - internal
+
+  api:
+    build: .
+    environment:
+      DB_HOST: db
+      DB_NAME: photobase
+      DB_USER: photouser
+      DB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${API_PORT:-6780}:80"
+    volumes:
+      - ${PHOTOS_PATH}:/photos:ro
+    depends_on:
+      - db
+    networks:
+      - internal
+
+volumes:
+  db_data:
+
+networks:
+  internal:

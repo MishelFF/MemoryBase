@@ -1,5 +1,6 @@
 // settingsmanager.cpp
 #include "settingsmanager.h"
+#include "PhotoRecord.h"
 #include "secrets.h"
 #include <QCoreApplication>
 #include <QByteArray>
@@ -49,7 +50,7 @@ void SettingsManager::setDbUser(const QString& v) { m_settings.setValue("db/user
 QString SettingsManager::dbPassword() const { return deobfuscate(m_settings.value("db/password").toString()); }
 void SettingsManager::setDbPassword(const QString& v) { m_settings.setValue("db/password", obfuscate(v)); emit dbPasswordChanged(); }
 
-QString SettingsManager::apiUrl() const { return m_settings.value("api/url", "https://api.example.com").toString(); }
+QString SettingsManager::apiUrl() const { return m_settings.value("api/url", API_URL).toString(); }
 void SettingsManager::setApiUrlProp(const QString& v) { m_settings.setValue("api/url", v); emit apiUrlChanged(); }
 
 bool SettingsManager::isValidApiUrl(const QString& url, QString* errorOut) const

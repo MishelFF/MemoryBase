@@ -12,7 +12,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+        
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v5
 
@@ -20,13 +23,17 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.0'
+          version: '6.10.0'
           cache: true
 
       - name: Configure
         working-directory: client
         run: cmake --preset windows-msvc
-
+      - name: Create secret.h
+        shell: pwsh
+        working-directory: client
+        run: |
+          Copy-Item secrets.h.example secrets.h
       - name: Build
         working-directory: client
         run: cmake --build --preset windows-msvc-release
@@ -34,9 +41,23 @@ jobs:
       - name: Install
         working-directory: client
         run: cmake --install build/windows-msvc --config Release
+        
+      - name: Deploy Qt
+        working-directory: client
+        shell: pwsh
+        run: |
+          windeployqt `
+            --release `
+            --no-translations `
+            install/windows-msvc/bin/PhotoDB.exe
 
+      - name: Package
+        working-directory: client
+        run: |
+          cpack --config build/windows-msvc/CPackConfig.cmake -C Release
+          
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: PhotoDB-windows
-          path: install/client/windows-msvc/**
+          path: client/build/windows-msvc/*.zip

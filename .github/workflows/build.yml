@@ -46,7 +46,14 @@ jobs:
       - name: Install
         working-directory: client
         run: cmake --install build/windows-msvc --config Release
-        
+
+      - name: Trim unused Qt SQL drivers
+        shell: pwsh
+        run: |
+          Get-ChildItem "$env:QT_ROOT_DIR\plugins\sqldrivers" -Filter *.dll |
+            Where-Object { $_.Name -ne 'qsqlpsql.dll' } |
+            Remove-Item -Force
+
       - name: Deploy Qt
         working-directory: client
         shell: pwsh
@@ -101,6 +108,10 @@ jobs:
       - name: Install
         working-directory: client
         run: cmake --install build/linux-release
+
+      - name: Trim unused Qt SQL drivers
+        run: |
+          find "$QT_ROOT_DIR/plugins/sqldrivers" -type f ! -name 'libqsqlpsql.so' -delete
 
       - name: Deploy Qt + libpq into AppImage
         working-directory: client

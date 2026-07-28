@@ -13,24 +13,31 @@ public:
 
     enum ItemType {Root,Media,Folder,Photo, Dummy};
 
+    static QString GetKey(const QString &media,const QString &path,const QString &name)
+    {
+            QString key;
+//            switch (type) {
+//            case Folder:
+//                key = media +  path; // полный путь папки
+//                break;
+//            case Photo:
+//                key = media + path + "/" + name; // полный путь файла
+//                break;
+//            default:
+//                key = media + name; // Media и Dummy
+//                break;
+//            }
+            key = media + path + "/" + name; // полный путь файла
+            return key;
+    }
+
     explicit PhotoTreeItem(ItemType t,const QString &n,const QString &p,const QString &media,
         QHash<QString,PhotoTreeItem*>* cIndex,PhotoTreeItem *parentItem  = nullptr):
         type(t),name(n),mediaName(media),path(p),parent(parentItem),childIndex(cIndex)
     {
         if (parent) {
             parent->children.append(this);
-            QString key;
-            switch (type) {
-            case Folder:
-                key = path; // полный путь папки
-                break;
-            case Photo:
-                key = path + "/" + name; // полный путь файла
-                break;
-            default:
-                key = name; // Media и Dummy
-                break;
-            }
+            QString key=GetKey(media,path,name);
             childIndex->insert(key, this);
         }
     }
@@ -39,13 +46,13 @@ public:
     {
         qDeleteAll(children);
     }
-    PhotoTreeItem *findChild(const QString &childName)
-    {
+//    PhotoTreeItem *findChild(const QString &childName)
+//    {
 //        for (PhotoTreeItem *item : children)
 //            if (item->type == childType && item->name == childName) return item;
 //        return nullptr;
-        return childIndex->value(childName,nullptr);    
-    }
+//        return childIndex->value(childName,nullptr);    
+//    }
 //    PhotoTreeItem *addChild(ItemType type,const QString &name)
 //    {
 //        PhotoTreeItem *item = new PhotoTreeItem(type, name, this);
@@ -103,7 +110,7 @@ private:
     PhotoTreeItem *itemFromIndex(const QModelIndex &index) const;
     PhotoTreeItem *m_root = nullptr;
     QHash<QString, PhotoTreeItem*> childIndex;
-    PhotoTreeItem *findChild(const QString &childName);
+    PhotoTreeItem *findChild(const QString &media,const QString &path,const QString &childName);
     QModelIndex indexFromItem(PhotoTreeItem *item) const;
 
 };

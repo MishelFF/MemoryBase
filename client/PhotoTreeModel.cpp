@@ -87,9 +87,9 @@ Qt::ItemFlags PhotoTreeModel::flags(const QModelIndex &index) const
     return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 }
 
-PhotoTreeItem *PhotoTreeModel::findChild(const QString &childName)
+PhotoTreeItem *PhotoTreeModel::findChild(const QString &media,const QString &path,const QString &childName)
 {
-        return childIndex.value(childName,nullptr);    
+        return childIndex.value(PhotoTreeItem::GetKey(media,path, childName),nullptr);    
 }
 
 int PhotoTreeModel::photoId(const QModelIndex &index) const
@@ -130,7 +130,7 @@ void PhotoTreeModel::addMedia(const QStringList &media)
 }
 void PhotoTreeModel::addFolders(const QString &media, const QStringList &folders) {
     
-    PhotoTreeItem *mediaItem = m_root->findChild(media);
+    PhotoTreeItem *mediaItem = findChild(media,QString(),media);
     if (!mediaItem) return;
     beginInsertRows(indexFromItem(mediaItem), mediaItem->children.count(),folders.count());
     for (const QString &fullPath : folders) {
@@ -142,7 +142,7 @@ void PhotoTreeModel::addFolders(const QString &media, const QStringList &folders
             //if (!currentPath.isEmpty()) 
                 currentPath += '/';
             currentPath += part;
-            PhotoTreeItem *item = findChild(currentPath);
+            PhotoTreeItem *item = findChild(media,currentPath,part);
             if (!item) {
                 item = new PhotoTreeItem(PhotoTreeItem::Folder, part,currentPath,media,&childIndex,parent);
                 new PhotoTreeItem(PhotoTreeItem::Dummy, QString(),currentPath,media,&childIndex, item);
@@ -165,26 +165,28 @@ QModelIndex PhotoTreeModel::indexFromItem(PhotoTreeItem *item) const
     return createIndex(row, 0, item);
 }
 void PhotoTreeModel::addPhotos(const QString &media, const QString &path, const QList<PhotoRecord> &photos) {
-    
-    PhotoTreeItem *folderItem = findChild(path);
+    QStringList parts = path.split('/', Qt::SkipEmptyParts);
+    QString fname=parts.last();
+    PhotoTreeItem *folderItem = findChild(media,path,fname);
     if (!folderItem) return;
     if (folderItem->photosLoaded) return;
     
-//    if (folderItem->children.size()> 0 && folderItem->children.first()->type == PhotoTreeItem::Dummy){
-//        childIndex.remove(folderItem->children.takeFirst()->name);
-//        delete folderItem->children.takeFirst();
-//    }
+    if ((folderItem->children.size()> 0) && (folderItem->children.first()->type == PhotoTreeItem::Dummy)){
+        beginRemoveRows(indexFromItem(folderItem), 0, 0);
+        childIndex.remove(PhotoTreeItem::GetKey(media,path,folderItem->children.first()->name));
+        delete folderItem->children.takeFirst();
+        endRemoveRows();
+    }
     int first = folderItem->children.size();
     int last  = first + photos.size() - 1;
     beginInsertRows(indexFromItem(folderItem), first, last);
     for (const PhotoRecord &photo : photos) {
-        if (!findChild(photo.path+"/"+photo.file)) {
+        if (!findChild(media,photo.path,photo.file)) {
             PhotoTreeItem *item =new PhotoTreeItem(PhotoTreeItem::Photo,photo.file, photo.path,  photo.mediaName,&childIndex,folderItem);
             item->photo = photo;
         }
     }
     folderItem->photosLoaded = true;
-
     endInsertRows();
 }
 /*void PhotoTreeModel::buildTree(

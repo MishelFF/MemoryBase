@@ -84,7 +84,16 @@ qt_add_executable(PhotoDB
 qt_add_qml_module(PhotoDB
     URI PhotoDBQml
     VERSION 1.0
-    QML_FILES Main.qml SettingsDialog.qml
+    QML_FILES Main.qml SettingsDialog.qml Theme.qml
+)
+
+qt_add_resources(PhotoDB "app_config"
+    PREFIX "/"
+    FILES qtquickcontrols2.conf
+)
+
+set_target_properties(PhotoDB PROPERTIES
+    WIN32_EXECUTABLE ON
 )
 
 target_link_libraries(PhotoDB PRIVATE

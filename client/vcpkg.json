@@ -1,0 +1,7 @@
+{
+    "name": "photodb",
+    "version": "1.0.0",
+    "dependencies": [
+        "libpq"
+    ]
+}

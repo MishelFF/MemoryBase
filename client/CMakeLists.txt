@@ -100,6 +100,22 @@ install(TARGETS PhotoDB RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 install(FILES Main.qml SettingsDialog.qml DESTINATION ${CMAKE_INSTALL_DATADIR}/PhotoDB/qml)
 
+if(WIN32 AND DEFINED VCPKG_INSTALLED_DIR)
+    set(_VCPKG_BIN_DIR "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+    if(EXISTS "${_VCPKG_BIN_DIR}")
+        file(GLOB _PQ_RUNTIME_DLLS
+            "${_VCPKG_BIN_DIR}/libpq.dll"
+            "${_VCPKG_BIN_DIR}/libcrypto*.dll"
+            "${_VCPKG_BIN_DIR}/libssl*.dll"
+            "${_VCPKG_BIN_DIR}/libiconv*.dll"
+            "${_VCPKG_BIN_DIR}/zlib1.dll"
+        )
+        install(FILES ${_PQ_RUNTIME_DLLS} DESTINATION ${CMAKE_INSTALL_BINDIR})
+    else()
+        message(WARNING "vcpkg bin dir not found at ${_VCPKG_BIN_DIR} — libpq runtime won't be packaged")
+    endif()
+endif()
+
 include(InstallRequiredSystemLibraries)
 
 set(CPACK_PACKAGE_NAME "PhotoDB")

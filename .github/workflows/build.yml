@@ -26,6 +26,11 @@ jobs:
           version: '6.10.0'
           cache: true
 
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+
       - name: Configure
         working-directory: client
         run: cmake --preset windows-msvc
@@ -61,3 +66,58 @@ jobs:
         with:
           name: PhotoDB-windows
           path: client/*.zip
+
+  linux:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.10.0'
+          cache: true
+
+      - name: Install PostgreSQL client lib
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev fuse libfuse2
+
+      - name: Configure
+        working-directory: client
+        run: cmake --preset linux-release
+
+      - name: Create secret.h
+        working-directory: client
+        run: cp secrets.h.example secrets.h
+
+      - name: Build
+        working-directory: client
+        run: cmake --build --preset linux-release
+
+      - name: Install
+        working-directory: client
+        run: cmake --install build/linux-release
+
+      - name: Deploy Qt + libpq into AppImage
+        working-directory: client
+        run: |
+          wget -c https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -c https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --executable install/linux-release/bin/PhotoDB \
+            --desktop-file packaging/PhotoDB.desktop \
+            --icon-file packaging/PhotoDB.png \
+            --plugin qt \
+            --output appimage
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoDB-linux
+          path: client/*.AppImage

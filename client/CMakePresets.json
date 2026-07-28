@@ -33,6 +33,7 @@
             "hidden": true,
             "generator": "Ninja Multi-Config",
             "binaryDir": "${sourceDir}/build/${presetName}",
+            "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
             "condition": {
                 "type": "equals",
                 "lhs": "${hostSystemName}",
@@ -42,8 +43,10 @@
                 "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}",
                 "CMAKE_C_COMPILER": "cl.exe",
                 "CMAKE_CXX_COMPILER": "cl.exe"
+            },
+            "environment": {
+                "_comment": "Ninja не находит cl.exe сам — либо запускайте из Developer Command Prompt, либо пропишите здесь PATH/INCLUDE/LIB из vcvarsall.bat"
             }
-           
         },
         {
             "name": "windows-msvc",

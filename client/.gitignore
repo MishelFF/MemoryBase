@@ -7,6 +7,7 @@ CMakeUserPresets.json
 Makefile
 *.cmake
 **/*.json
+!vcpkg.json
 .clang-format
 !CMakeLists.txt
 

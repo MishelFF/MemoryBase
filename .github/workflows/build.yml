@@ -226,7 +226,7 @@ jobs:
           path: client/build/android/android-build/build/outputs/apk/debug/*.apk
 
   release:
-    needs: [ check-version, windows, linux ]
+    needs: [ check-version, windows, linux, android ]
     if: needs.check-version.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -243,6 +243,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: PhotoDB-linux
+          path: dist
+
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: PhotoDB-android
           path: dist
 
       - name: Publish GitHub Release

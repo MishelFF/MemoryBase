@@ -3,10 +3,35 @@ name: Build
 on:
   push:
     branches: [ main ]
-    tags: [ 'v*' ]
   pull_request:
 
 jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+      version: ${{ steps.diff.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare VERSION in CMakeLists.txt
+        id: diff
+        run: |
+          NEW=$(grep -oP 'project\(PhotoDB VERSION \K[0-9.]+' client/CMakeLists.txt)
+          OLD=$(git show "${{ github.event.before }}:client/CMakeLists.txt" 2>/dev/null \
+                | grep -oP 'project\(PhotoDB VERSION \K[0-9.]+' || true)
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+          if [ -n "$OLD" ] && [ "$NEW" != "$OLD" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version $OLD -> $NEW"
   windows:
     runs-on: windows-latest
 
@@ -62,6 +87,7 @@ jobs:
           windeployqt `
             --release `
             --no-translations `
+            --qmldir . `
             install/windows-msvc/bin/PhotoDB.exe
 
       - name: Package
@@ -116,6 +142,8 @@ jobs:
 
       - name: Deploy Qt + libpq into AppImage
         working-directory: client
+        env:
+          QML_SOURCES_PATHS: ${{ github.workspace }}/client
         run: |
           wget -c https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           wget -c https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
@@ -135,8 +163,8 @@ jobs:
           path: client/*.AppImage
 
   release:
-    needs: [ windows, linux ]
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ check-version, windows, linux ]
+    if: needs.check-version.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -157,5 +185,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ needs.check-version.outputs.version }}
+          name: v${{ needs.check-version.outputs.version }}
           files: dist/*
-          generate_release_notes: false
+          generate_release_notes: true

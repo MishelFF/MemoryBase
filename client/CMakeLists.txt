@@ -81,6 +81,10 @@ qt_standard_project_setup()
 qt_add_executable(PhotoDB
     ${SOURCES}
 )
+if(ANDROID)
+    set_property(TARGET PhotoDB PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
+    )
+endif()
 qt_add_qml_module(PhotoDB
     URI PhotoDBQml
     VERSION 1.0

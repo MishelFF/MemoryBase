@@ -5,7 +5,7 @@ import QtQuick.Layouts
 
 ApplicationWindow {
 
-    width:1700
+    width:1400
     height:900
     visible:true
     title: "Photo Database on BOX"
@@ -172,7 +172,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 currentIndex: importPanelVisible ? 1 : 0
                 ColumnLayout {
-                    spacing: 10
+                    spacing: Theme.spacingMd
                     Image {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -182,7 +182,7 @@ ApplicationWindow {
                     Rectangle {
                         Layout.fillWidth: true
                         height: 1
-                        color: "#808080"
+                        color: Theme.divider
                     }
                     ScrollView {
                         Layout.fillWidth: true
@@ -198,20 +198,20 @@ ApplicationWindow {
                                 delegate: Rectangle {
                                     Layout.fillHeight: true
                                     Layout.preferredWidth: 130
-                                    color: index % 2 === 0 ? "#f5f5f5" : "transparent"
+                                    color: index % 2 === 0 ? Theme.rowAlternate : "transparent"
                                     ColumnLayout {
                                         anchors.fill: parent
-                                        anchors.margins: 6
-                                        spacing: 2
+                                        anchors.margins: Theme.spacingXs
+                                        spacing: Theme.spacingXxs
                                         Label {
                                             text: modelData.label
-                                            font.pointSize: 8
-                                            color: "#606060"
+                                            font.pointSize: Theme.fontSizeCaption
+                                            color: Theme.textSecondary
                                             Layout.fillWidth: true
                                         }
                                         Label {
                                             text: modelData.value
-                                            font.pointSize: 9
+                                            font.pointSize: Theme.fontSizeSmall
                                             elide: Text.ElideRight
                                             Layout.fillWidth: true
                                             ToolTip.visible: hovered
@@ -226,8 +226,8 @@ ApplicationWindow {
                     }
                 }
                 ColumnLayout {
-                    spacing: 16
-                    Layout.margins: 20
+                    spacing: Theme.spacingLg
+                    Layout.margins: Theme.spacingXl
                     Label {
                         text: pendingAction === "scan"
                               ? "Импорт новых файлов"
@@ -235,7 +235,7 @@ ApplicationWindow {
                               ? "Создание миниатюр"
                               : "Проверка отсутствующих файлов"
                         font.bold: true
-                        font.pointSize: 14
+                        font.pointSize: Theme.fontSizeTitle
                     }
                     Label { text: "Имя носителя (media):" }
                     ComboBox {
@@ -317,24 +317,24 @@ ScrollView {
             delegate: Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 24
-                color: index % 2 === 0 ? "#f5f5f5" : "transparent"
+                color: index % 2 === 0 ? Theme.rowAlternate : "transparent"
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 6
-                    anchors.rightMargin: 6
-                    spacing: 8
+                    anchors.leftMargin: Theme.spacingXs
+                    anchors.rightMargin: Theme.spacingXs
+                    spacing: Theme.spacingSm
 
                     Label {
                         text: modelData.path
-                        font.pointSize: 8
-                        color: "#606060"
+                        font.pointSize: Theme.fontSizeCaption
+                        color: Theme.textSecondary
                         elide: Text.ElideLeft
                         Layout.preferredWidth: 160
                     }
                     Label {
                         text: modelData.file
-                        font.pointSize: 8
+                        font.pointSize: Theme.fontSizeCaption
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                     }

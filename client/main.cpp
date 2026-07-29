@@ -12,9 +12,12 @@
 
 int main(int argc,char *argv[])
 {
+#ifdef Q_OS_ANDROID
+    qputenv("QT_ANDROID_DISABLE_ACCESSIBILITY", "1");
+#endif
     QGuiApplication app(argc,argv);
     QQmlApplicationEngine engine;
-    QCoreApplication::setOrganizationName("MishelMF");
+    QCoreApplication::setOrganizationName("MishelFF");
     QCoreApplication::setApplicationName("MemoryBase");
     
     qRegisterMetaType<PhotoRecord>("PhotoRecord");
@@ -25,7 +28,6 @@ int main(int argc,char *argv[])
 #ifdef Q_OS_ANDROID
 
     qputenv("QT_ANDROID_DISABLE_ACCESSIBILITY", "1");
-    qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
     repository= new ApiWorker;
 
 #else

@@ -2,6 +2,8 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QTimer>
+#include <QAccessible>
+#include <QQmlFileSelector>
 #include "ScannerController.h"
 #include "DirectoryModel.h"
 #include "PhotoTreeModel.h"
@@ -14,11 +16,15 @@ int main(int argc,char *argv[])
 {
 #ifdef Q_OS_ANDROID
     qputenv("QT_ANDROID_DISABLE_ACCESSIBILITY", "1");
+    qDebug() << qEnvironmentVariable("QT_ANDROID_DISABLE_ACCESSIBILITY");
 #endif
     QGuiApplication app(argc,argv);
+    QAccessible::setActive(false);
     QQmlApplicationEngine engine;
     QCoreApplication::setOrganizationName("MishelFF");
     QCoreApplication::setApplicationName("MemoryBase");
+//    auto selector=new QQmlFileSelector(&engine);
+//    selector->setExtraSelectors({"android"});
     
     qRegisterMetaType<PhotoRecord>("PhotoRecord");
 
@@ -27,8 +33,7 @@ int main(int argc,char *argv[])
 
 #ifdef Q_OS_ANDROID
 
-    qputenv("QT_ANDROID_DISABLE_ACCESSIBILITY", "1");
-    repository= new ApiWorker;
+        repository= new ApiWorker;
 
 #else
 

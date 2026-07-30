@@ -94,7 +94,15 @@ endif()
 qt_add_qml_module(PhotoDB
     URI PhotoDBQml
     VERSION 1.0
-    QML_FILES Main.qml SettingsDialog.qml Theme.qml
+    QML_FILES
+        Main.qml
+        PlatformLayout.qml
+        +android/PlatformLayout.qml
+        TreeScreen.qml
+        PreviewScreen.qml
+        ImportScreen.qml
+        SettingsDialog.qml
+        Theme.qml
 )
 
 # qtquickcontrols2.conf должен лежать в корне ресурсов (":/qtquickcontrols2.conf"),
@@ -122,7 +130,15 @@ include(GNUInstallDirs)
 if(NOT ANDROID)
     install(TARGETS PhotoDB RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-    install(FILES Main.qml SettingsDialog.qml DESTINATION ${CMAKE_INSTALL_DATADIR}/PhotoDB/qml)
+    install(FILES
+        Main.qml
+        PlatformLayout.qml
+        TreeScreen.qml
+        PreviewScreen.qml
+        ImportScreen.qml
+        SettingsDialog.qml
+        Theme.qml
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/PhotoDB/qml)
 
     # QSql PSQL-драйвер (Qt6::Sql) грузит libpq динамически через QLibrary в рантайме,
     # windeployqt эту зависимость не видит и не копирует — тащим её из vcpkg сами.

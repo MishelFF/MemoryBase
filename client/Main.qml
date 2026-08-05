@@ -47,7 +47,7 @@ ApplicationWindow {
             }
         }
     }
-
+    LicenseDialog { id: licenseDlg }
     Connections {
         target: scannerController
         function onStatus(message) {

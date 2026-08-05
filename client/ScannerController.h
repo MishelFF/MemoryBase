@@ -11,6 +11,8 @@
 #include "PhotoRecord.h"
 #include "FileKey.h"
 #include "settingsmanager.h"
+#include "PhotoTreeModel.h"
+#include "LicenseManager.h"
 
 class PhotoRepository;
 class PhotoTreeModel;
@@ -27,39 +29,68 @@ public:
     Q_PROPERTY(int importProcessed READ importProcessed NOTIFY importProgressChanged)
     Q_PROPERTY(bool importRunning READ importRunning NOTIFY importRunningChanged)
     Q_PROPERTY(QVariantList photoInfo READ photoInfo NOTIFY selectedPhotoChanged)
-    Q_PROPERTY(QVariantList missingFiles READ missingFiles NOTIFY missingFilesChanged)
+    Q_PROPERTY(bool hasNextPhoto READ hasNextPhoto NOTIFY navigationChanged)
+    Q_PROPERTY(bool hasPreviousPhoto READ hasPreviousPhoto NOTIFY navigationChanged)
+    Q_PROPERTY(QString selectedPhotoKey READ selectedPhotoKey NOTIFY selectedPhotoChanged)
+    Q_PROPERTY(QString selectedPhotoName READ selectedPhotoName NOTIFY selectedPhotoChanged)
+    Q_PROPERTY(QString selectedPhotoFolder READ selectedPhotoFolder NOTIFY selectedPhotoChanged)
+    Q_PROPERTY(QString missingFilesText READ missingFilesText NOTIFY missingFilesTextChanged)
+    Q_PROPERTY(QStringList knownMedia READ knownMedia NOTIFY knownMediaChanged)
+    Q_PROPERTY(QStringList knownMountPoints READ knownMountPoints NOTIFY knownMountPointsChanged)
+
+    bool hasNextPhoto() const { return m_nextPhotoId >= 0; }
+    bool hasPreviousPhoto() const { return m_previousPhotoId >= 0; }
+    
+    Q_INVOKABLE void selectNextPhoto();
+    Q_INVOKABLE void selectPreviousPhoto();
 
     int importTotal() const { return m_totalFiles; }
     int importProcessed() const { return m_processedFiles.loadRelaxed(); }
     bool importRunning() const { return m_importRunning; }
     Q_INVOKABLE QString mountPointFor(const QString &media) const;
-    QVariantList missingFiles() const { return m_missingFiles; }
 
-    explicit ScannerController(PhotoRepository *repository,SettingsManager* settings,QObject *parent = nullptr);
+    explicit ScannerController(PhotoRepository *repository,SettingsManager* settings,LicenseManager *licenseManager,QObject *parent = nullptr);
     ~ScannerController();
 
     PhotoTreeModel* photoTree() const;
     QString thumbnailDataSource() const;
     QVariantList photoInfo() const;
+    QString selectedPhotoKey() const {
+        return PhotoTreeItem::GetKey(m_selectedPhoto.mediaName, m_selectedPhoto.path, m_selectedPhoto.file);
+    }
+    QString selectedPhotoName() const { return m_selectedPhoto.file; }
+    QString selectedPhotoFolder() const { return m_selectedPhoto.path; }
+    QString missingFilesText() const { return m_missingFilesText; }
+    QStringList knownMedia() const { return m_knownMedia; }
+    QStringList knownMountPoints() const { return m_knownMountPoints; }
+
 public slots:
     void loadTree();
     void selectPhoto(int id);
     void loadMedia();
     void loadFolders(const QString &media);
     void loadPhotos(const QString &media,const QString &path);
+    void loadMediaMounts();
     void scanFolder(const QString &media, const QString &mountPoint, const QString &folder);
     void generateMissingThumbnails(const QString &media, const QString &mountPoint,const QString &rootFolder);
     void onFileProcessed();
     void incrementProcessed();
     void findMissingFiles(const QString &media, const QString &mountPoint, const QString &folder);
-    void missingFileFound(int id, const QString &path, const QString &file);
+//    void missingFileFound(int id, const QString &path, const QString &file);
+    void appendMissingFiles(const QStringList &rows);
 signals:
     void selectedPhotoChanged();
+//    void requestPhotos(QString media,QString path);
+    void photoInFolderLoaded();
     void status(QString message);
     void connectrepository(SettingsManager*);
     void importProgressChanged();
     void importRunningChanged();
-    void missingFilesChanged();
+    void navigationChanged();               // hasNextPhoto/hasPreviousPhoto
+    void folderBoundaryCrossed(QString folderName); // Folder changed
+    void knownMediaChanged();
+    void missingFilesTextChanged();
+    void knownMountPointsChanged();
 
 private slots:
     void databaseConnected(bool ok);
@@ -69,6 +100,8 @@ private slots:
     void photoLoaded(PhotoRecord photo);
     void photoTreeLoaded(const QList<PhotoRecord> &photos);
     void reConnected();
+    void mediaMountsLoaded(QVariantList mounts);
+
 //    void selectPhotoLoaded(const PhotoRecord &photo);
 //    void treeItemExpanded(int type,QString media,QString path);
 //    void progressChanged(int value);
@@ -76,6 +109,9 @@ private slots:
 
 private:
     void enqueueImport(const PhotoRecord &photo, bool reportProgress);
+    PhotoTreeItem *findNeighborLevelUp(PhotoTreeItem *item,int increment);
+    PhotoTreeItem *findNeighborLevelDown(PhotoTreeItem *item,int increment);
+    void updateNavigationNeighbors();
 
     PhotoRepository *m_repository = nullptr;
     QThread *m_repositoryThread = nullptr;
@@ -92,5 +128,16 @@ private:
     QAtomicInteger<int> m_processedFiles{0};
     bool m_importRunning = false;
     QVariantList m_mediaMounts;
-    QVariantList m_missingFiles;
+    QStringList m_knownMedia;
+    QString m_missingFilesText;
+    int m_missingFilesCount=0;
+    int m_nextPhotoId = -1;
+    int m_previousPhotoId = -1;
+    bool blockNavigation;
+    QString m_nextPhotoFolder;
+    QString m_previousPhotoFolder;
+    QList<QByteArray> supportedFormats;
+    QStringList m_knownMountPoints;
+    LicenseManager *m_licenseManager; 
+
 };

@@ -1,0 +1,65 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "windows-msvc-local",
+            "displayName": "Windows (Ninja Multi-Config, локальные пути)",
+            "inherits": "windows-msvc",
+            "cacheVariables": {
+                "CMAKE_PREFIX_PATH": "C:/Qt/6.11.1/msvc2022_64"
+            },
+            "environment": {
+                "VCPKG_ROOT": "D:/MF/vcpkg"
+            }
+        },
+        {
+            "name": "android-local-base",
+            "hidden": true,
+            "environment": {
+                "ANDROID_SDK_ROOT": "C:/Users/mfilatov/AppData/Local/Android/Sdk",
+                "ANDROID_NDK_ROOT": "C:/Users/mfilatov/AppData/Local/Android/Sdk/ndk/27.2.12479018",
+                "JAVA_HOME": "C:/Users/Public/Documents/Embarcadero/Studio/37.0/PlatformSDKs/jdk-21.0.8.9-hotspot",
+                "PATH": "C:/Users/Public/Documents/Embarcadero/Studio/37.0/PlatformSDKs/jdk-21.0.8.9-hotspot/bin;$penv{PATH}",
+                "QT_HOST_PATH": "C:/Qt/6.11.1/msvc2022_64"
+            }
+        },
+        {
+            "name": "android-local",
+            "displayName": "Android (arm64-v8a, устройство, локальные пути)",
+            "inherits": [ "android", "android-local-base" ],
+            "environment": {
+                "QT_ROOT_DIR": "C:/Qt/6.11.1/android_arm64_v8a"
+            }
+        },
+        {
+            "name": "android-x86_64-local",
+            "displayName": "Android (x86_64, эмулятор, локальные пути)",
+            "inherits": [ "android-x86_64", "android-local-base" ],
+            "environment": {
+                "QT_ROOT_DIR": "C:/Qt/6.11.1/android_x86_64"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "windows-msvc-local-debug",
+            "configurePreset": "windows-msvc-local",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-msvc-local-release",
+            "configurePreset": "windows-msvc-local",
+            "configuration": "Release"
+        },
+        {
+            "name": "android-local-apk",
+            "configurePreset": "android-local",
+            "targets": [ "apk" ]
+        },
+        {
+            "name": "android-x86_64-local-apk",
+            "configurePreset": "android-x86_64-local",
+            "targets": [ "apk" ]
+        }
+    ]
+}

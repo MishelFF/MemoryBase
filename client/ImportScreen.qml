@@ -27,7 +27,7 @@ ScrollView {
             let rawUrl = mountDlg.selectedFolder || mountDlg.folder
             if (rawUrl) {
                 let urlString = Qt.resolvedUrl(rawUrl).toString()
-                mountPointField.text = urlString.replace(/^file:\/\/\/?/, "")
+                mountPointField.editText = urlString.replace(/^file:\/\/\/?/, "")
             }
         }
     }
@@ -56,18 +56,27 @@ ScrollView {
             onEditTextChanged: {
                 let mp = scannerController.mountPointFor(editText)
                 if (mp !== "")
-                    mountPointField.text = mp
+                    mountPointField.editText = mp
             }
         }
 
         Label { text: "Точка монтирования (корень носителя):" }
         RowLayout {
             Layout.fillWidth: true
-            TextField {
+            ComboBox {
                 id: mountPointField
+                editable: true
                 Layout.fillWidth: true
+                model: scannerController.knownMountPoints
                 enabled: !scannerController.importRunning
-                placeholderText: "например, D:/ или /media/Disk0"
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "например, D:/ или /media/Disk0"
+                    color: Theme.textSecondary
+                    visible: mountPointField.editText === ""
+                }
             }
             Button {
                 text: "..."
@@ -84,15 +93,15 @@ ScrollView {
                 text: "Начать"
                 Layout.fillWidth: true
                 enabled: mediaNameField.editText.trim() !== ""
-                    && mountPointField.text.trim() !== ""
+                    && mountPointField.editText.trim() !== ""
                     && !scannerController.importRunning
                 onClicked: {
                     if (root.pendingAction === "scan")
-                        scannerController.scanFolder(mediaNameField.editText, mountPointField.text, root.rootFolder)
+                        scannerController.scanFolder(mediaNameField.editText, mountPointField.editText, root.rootFolder)
                     else if (root.pendingAction === "thumbnails")
-                        scannerController.generateMissingThumbnails(mediaNameField.editText, mountPointField.text, root.rootFolder)
+                        scannerController.generateMissingThumbnails(mediaNameField.editText, mountPointField.editText, root.rootFolder)
                     else if (root.pendingAction === "missing")
-                        scannerController.findMissingFiles(mediaNameField.editText, mountPointField.text, root.rootFolder)
+                        scannerController.findMissingFiles(mediaNameField.editText, mountPointField.editText, root.rootFolder)
                 }
             }
             Button {
@@ -117,40 +126,13 @@ ScrollView {
               : ""
         }
 
-        ColumnLayout {
+        Text {
             Layout.fillWidth: true
-            spacing: 0
-            visible: root.pendingAction === "missing" && scannerController.missingFiles.length > 0
-
-            Repeater {
-                model: scannerController.missingFiles
-                delegate: Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: missingRow.implicitHeight + Theme.spacingXs * 2
-                    color: index % 2 === 0 ? Theme.rowAlternate : "transparent"
-
-                    ColumnLayout {
-                        id: missingRow
-                        anchors.fill: parent
-                        anchors.margins: Theme.spacingXs
-                        spacing: 0
-
-                        Label {
-                            text: modelData.path
-                            font.pointSize: Theme.fontSizeCaption
-                            color: Theme.textSecondary
-                            elide: Text.ElideLeft
-                            Layout.fillWidth: true
-                        }
-                        Label {
-                            text: modelData.file
-                            font.pointSize: Theme.fontSizeCaption
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
-                    }
-                }
-            }
+            visible: root.pendingAction === "missing" && text.length > 0
+            text: scannerController.missingFilesText
+            font.pointSize: Theme.fontSizeCaption
+            color: Theme.textSecondary
+            wrapMode: Text.NoWrap
         }
     }
 }

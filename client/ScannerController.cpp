@@ -8,10 +8,11 @@
 #include "ImportTask.h"
 #include "DatabaseWorker.h"
 #include "PhotoTreeModel.h"
+#include "LicenseManager.h"
 #include "ScannerController.h"
 
-ScannerController::ScannerController(PhotoRepository *repository,SettingsManager* settings,QObject *parent): 
-QObject(parent), m_repository(repository),m_settings(settings)
+ScannerController::ScannerController(PhotoRepository *repository,SettingsManager* settings,LicenseManager *licenseManager,QObject *parent): 
+QObject(parent), m_repository(repository),m_settings(settings),m_licenseManager(licenseManager)
 {
     m_photoTree = new PhotoTreeModel(this);
     
@@ -32,7 +33,10 @@ QObject(parent), m_repository(repository),m_settings(settings)
     connect(m_photoTree,&PhotoTreeModel::requestFolders,this,&ScannerController::loadFolders);
     connect(m_photoTree,&PhotoTreeModel::requestPhotos,this,&ScannerController::loadPhotos);
     connect(m_settings,&SettingsManager::settingsSaved,this,&ScannerController::reConnected);
+    connect(m_repository,&PhotoRepository::mediaMountsLoaded,this,&ScannerController::mediaMountsLoaded);
+//    connect(this,&ScannerController::requestPhotos,m_photoTree,&PhotoTreeModel::requestPhotos);
     //emit connectrepository(m_settings);
+    supportedFormats = QImageReader::supportedImageFormats();
     QTimer::singleShot(0, this, [this](){
         this->reConnected(); 
     });
@@ -69,6 +73,7 @@ void ScannerController::photoLoaded(PhotoRecord photo)
         m_thumbnailSource = "data:image/jpeg;base64," + QString::fromLatin1( photo.thumbnail.toBase64());
     }
     emit selectedPhotoChanged();
+    updateNavigationNeighbors();
 }
 QString ScannerController::thumbnailDataSource() const
 {
@@ -88,6 +93,8 @@ void ScannerController::mediaLoaded(QStringList media)
          m_repository->loadFolders(name);
         }, Qt::QueuedConnection);       
     }
+    m_knownMedia = media;
+    emit knownMediaChanged();
     emit status(QString("Media count: %1").arg(media.size()));
 }
 
@@ -126,7 +133,35 @@ void ScannerController::photosLoaded(QList<PhotoRecord> photos)
 {
     if(photos.isEmpty()) return;
     m_photoTree->addPhotos(photos.first().mediaName,photos.first().path,photos);
+    emit photoInFolderLoaded();
 }
+void ScannerController::loadMediaMounts()
+{
+    QMetaObject::invokeMethod(m_repository, &PhotoRepository::loadMediaMounts, Qt::QueuedConnection);
+}
+void ScannerController::mediaMountsLoaded(QVariantList mounts)
+{
+    m_mediaMounts = mounts; // используется в mountPointFor(media)
+
+    QSet<QString> unique;
+    QSet<QString> uniqueME;
+    for (const QString &m: m_knownMedia) uniqueME.insert(m);
+    for (const QVariant &v : mounts) {
+        const QString mp = v.toMap().value("mountPoint").toString();
+        const QString me = v.toMap().value("media").toString();
+        if (!mp.isEmpty())
+            unique.insert(mp);
+        if (!me.isEmpty())
+            uniqueME.insert(me);
+    }
+    m_knownMountPoints = QStringList(unique.begin(), unique.end());
+    m_knownMountPoints.sort(Qt::CaseInsensitive);
+    m_knownMedia=QStringList(uniqueME.begin(), uniqueME.end());
+    m_knownMedia.sort(Qt::CaseInsensitive);
+    emit knownMountPointsChanged();
+    emit knownMediaChanged();
+}
+
 void ScannerController::reConnected()
 {
     emit connectrepository(m_settings);
@@ -163,33 +198,62 @@ void ScannerController::scanFolder(const QString &media, const QString &mountPoi
     m_totalFiles = filenames.size();
     m_processedFiles.storeRelaxed(0);
     m_reportInterval = qMax(1, m_totalFiles / 200);
-    
-    int index = 0;int existCount=0;
-    for (const QString &filename : filenames) {
+    int existCount=0;
+    auto makePhotoRecord = [this, &mountDir, &media ](const QString &filename,PhotoRecord &photo) {
         QFileInfo info(filename);
         QString relativeDir = mountDir.relativeFilePath(info.absolutePath());
         QString normalizedPath = (relativeDir.isEmpty() || relativeDir == ".") ? "/" : "/" + relativeDir;
-
         FileKey key;
-        key.path = normalizedPath;//убрать букву - переделано
+        key.path = normalizedPath;
         key.file = info.fileName();
-        key.size = info.size();        
+        key.size = info.size();
         key.modified = info.lastModified();
-        if (!m_cache.contains(key)) {
-            PhotoRecord photo;
+        bool result=!m_cache.contains(key);
+        if (result) {
             photo.file = info.fileName();
-            photo.path = normalizedPath;;
+            photo.path = normalizedPath;
             photo.fullPath = filename;
             photo.fileSize = info.size();
-            photo.lastModified = info.lastModified();
+            photo.dateAvailable = info.lastModified();
             photo.extension = info.suffix().toLower();
-            photo.mediaName = media; 
-            bool shouldReport = (index % m_reportInterval == 0) || (index == m_totalFiles - 1);
-            enqueueImport(photo, shouldReport);
+            photo.mediaName = media;
         } 
-        else {incrementProcessed();++existCount;}   
-        ++index;
+        return result;
+    };
+    bool shortTasks=USESHORTTASKS;
+    if (shortTasks){
+        int index = 0;
+        for (const QString &filename : filenames) {
+            PhotoRecord photo;
+            if ( makePhotoRecord(filename,photo)){
+                bool shouldReport =(index % m_reportInterval == 0) ||(index == m_totalFiles - 1);
+                enqueueImport(photo, shouldReport);
+            } 
+            else {incrementProcessed();++existCount;}   
+            ++index;
+        }
     }
+    else{
+        const int threadCount = qMax(1, m_pool.maxThreadCount());
+        const int chunkSize = qMax(500, m_totalFiles / (threadCount * 4));
+        int index = 0;
+        int flag=chunkSize;
+        PhotoChunk chunk;
+        chunk.reserve(flag);
+        for (const QString &filename : filenames) {
+            PhotoRecord photo;
+            if ( makePhotoRecord(filename,photo)){
+                chunk.push_back(photo);--flag;
+            } 
+            else {incrementProcessed();++existCount;}   
+            if(!flag ||index==(filenames.size()-1)){ 
+                m_pool.start(new ImportComplexTask(chunk, dbWorker, this, THUMB_SIZE, m_reportInterval));
+                flag=chunkSize;chunk.clear();
+            }
+            ++index;
+        }
+    }
+
     emit importProgressChanged();
     emit status(QString("Добавлено файлов: %1, уже загружены: %2").arg(m_totalFiles).arg(existCount));
 }
@@ -201,6 +265,8 @@ void ScannerController::enqueueImport(const PhotoRecord &photo, bool reportProgr
     if (!dbWorker) return;
 
     ImportTask *task = new ImportTask(photo, dbWorker, &m_pool, this, reportProgress);
+//    task->run();
+//    delete task;
     m_pool.start(task);
 }
 
@@ -264,12 +330,12 @@ void ScannerController::generateMissingThumbnails(const QString &media, const QS
 void ScannerController::onFileProcessed()
 {
     emit importProgressChanged();
-//    qDebug()<<QString("Change progress on form %1").arg(m_processedFiles.loadRelaxed());
+  //  qDebug()<<QString("Change progress on form %1").arg(m_processedFiles.loadRelaxed());
     if (m_processedFiles.loadRelaxed() >= m_totalFiles) {
         m_importRunning = false;
         emit importRunningChanged();
-        if (!m_missingFiles.isEmpty())
-            emit status(QString("Проверка завершена. найдено отсутствие %1 файлов").arg(m_missingFiles.size()));
+        if (!m_missingFilesCount)
+            emit status(QString("Проверка завершена. найдено отсутствие %1 файлов").arg(m_missingFilesCount));
         else
             emit status("Обработка завершена");
     }
@@ -281,12 +347,14 @@ void ScannerController::incrementProcessed()
 }
 void ScannerController::databaseConnected(bool ok)
 {
+    m_licenseManager->checkLicense();
     if (!ok) {
         emit status("Database connection failed");
         return;
     }
     emit status("Database connected. Loading photo tree...");
     loadTree();
+    loadMediaMounts();
 }
 void ScannerController::photoTreeLoaded(const QList<PhotoRecord> &photos)
 {
@@ -339,8 +407,9 @@ void ScannerController::findMissingFiles(const QString &media, const QString &mo
     QList<PhotoRecord> entries;
     QMetaObject::invokeMethod(dbWorker, [&](){entries = dbWorker->loadPathEntries(media, relPath);}, Qt::BlockingQueuedConnection);
 
-    m_missingFiles.clear();
-    emit missingFilesChanged();
+    m_missingFilesText.clear();
+    m_missingFilesCount=0;
+    emit missingFilesTextChanged();;
 
     m_totalFiles = entries.size();
     m_processedFiles.storeRelaxed(0);
@@ -349,21 +418,146 @@ void ScannerController::findMissingFiles(const QString &media, const QString &mo
     emit importRunningChanged();
     emit importProgressChanged();
     emit status(QString("Проверка %1 записей на наличие файлов...").arg(entries.size()));
+    const int threadCount = qMax(1, m_pool.maxThreadCount());
+    const int chunkSize = qMax(500, m_totalFiles / (threadCount * 4));
 
-    int index = 0;
+    int index = 0;int flag=chunkSize;
+    PhotoChunk chunk;
+    chunk.reserve(flag);
     for (const PhotoRecord &entry : entries) {
-        bool shouldReport = (index % m_reportInterval == 0) || (index == m_totalFiles - 1);
-        m_pool.start(new MissingFileTask(entry, mountPoint, dbWorker, this, shouldReport));
+        chunk.push_back(entry);--flag;
+        if(!flag ||index==(entries.size()-1)){ 
+//            bool shouldReport = (index % m_reportInterval == 0) || (index == m_totalFiles - 1);
+            m_pool.start(new MissingFileTask(chunk, mountPoint, dbWorker, this, true));
+            flag=chunkSize;chunk.clear();
+        }
         ++index;
     }
 }
 
-void ScannerController::missingFileFound(int id, const QString &path, const QString &file)
+//void ScannerController::missingFileFound(int id, const QString &path, const QString &file)
+//{
+//    emit missingFilesChanged();
+//}
+PhotoTreeItem * ScannerController::findNeighborLevelDown(PhotoTreeItem *item,int increment) 
 {
-    QVariantMap row;
-    row["id"] = id;
-    row["path"] = path;
-    row["file"] = file;
-    m_missingFiles.append(row);
-    emit missingFilesChanged();
+    PhotoTreeItem *result=nullptr;
+    if (!item->photosLoaded){
+
+        QEventLoop loop;
+        bool success = false;
+        QTimer timeoutTimer;
+        timeoutTimer.setSingleShot(true); 
+        QMetaObject::Connection dataConn = connect(this, &ScannerController::photoInFolderLoaded, 
+            [&loop, &timeoutTimer, &success]() {success = true;timeoutTimer.stop();loop.quit();});
+        QMetaObject::Connection timeoutConn = connect(&timeoutTimer, &QTimer::timeout,[&loop]() {loop.quit();});
+        timeoutTimer.start(2000);
+        loadPhotos(item->mediaName,  item->path.startsWith("/") ? item->path : ("/" + item->path));
+        loop.exec();
+        disconnect(dataConn);
+        disconnect(timeoutConn);
+    }
+    if (item->photosLoaded){
+        auto loopBody = [&](auto begin, auto end) {
+            for (auto it = begin; it != end; ++it)
+                if((*it)->type==PhotoTreeItem::Folder) {
+                    PhotoTreeItem *child=findNeighborLevelDown(*it,increment);
+                    if (child&&(child->type==PhotoTreeItem::Photo)){result=child;break;}
+                }
+                else if ((*it)->type==PhotoTreeItem::Photo && isSupportedImage((*it)->photo)) {result=*it;break;} //Пока не все файлы умеет
+        };
+        if (increment>0) {
+            loopBody(item->children.begin(), item->children.end());
+        } else {
+            loopBody(item->children.rbegin(), item->children.rend());
+        }
+    }
+    return result;
+}
+PhotoTreeItem * ScannerController::findNeighborLevelUp(PhotoTreeItem *item,int increment) 
+{
+
+    PhotoTreeItem *parentItem=item->parent;
+    if (!parentItem) return nullptr;
+
+    int neightborIndex=parentItem->children.indexOf(const_cast<PhotoTreeItem*>(item))+increment;
+    while ((neightborIndex>=0)&&(neightborIndex<parentItem->children.size())){
+        PhotoTreeItem *neightbor=parentItem->children[neightborIndex];
+        if (neightbor&&neightbor->type==PhotoTreeItem::Folder){
+            PhotoTreeItem *found=findNeighborLevelDown(neightbor,increment);
+            if (found) return found;
+        }
+        else if (neightbor&&neightbor->type==PhotoTreeItem::Photo&&isSupportedImage(neightbor->photo)){
+            return neightbor;
+        }
+        neightborIndex+=increment;
+    }
+    return findNeighborLevelUp(parentItem,increment);
+}
+
+void ScannerController::updateNavigationNeighbors()
+{
+   qDebug()<<"StartFindNeibors "<<m_selectedPhoto.id<<" - "<<m_selectedPhoto.path<< m_selectedPhoto.file;
+
+    PhotoTreeItem *currentItem = m_photoTree->itemForPhoto(
+        m_selectedPhoto.mediaName, m_selectedPhoto.path, m_selectedPhoto.file);
+
+    if (!currentItem) {
+        m_nextPhotoId = -1;
+        m_previousPhotoId = -1;
+        m_nextPhotoFolder.clear();
+        m_previousPhotoFolder.clear();
+        emit navigationChanged();
+        return;
+    }
+
+    PhotoTreeItem *nextItem = findNeighborLevelUp(currentItem, +1);
+    PhotoTreeItem *previousItem = findNeighborLevelUp(currentItem, -1);
+
+    m_nextPhotoId = (nextItem && nextItem->type == PhotoTreeItem::Photo) ? nextItem->photo.id : -1;
+    m_previousPhotoId = (previousItem && previousItem->type == PhotoTreeItem::Photo) ? previousItem->photo.id : -1;
+    m_nextPhotoFolder = nextItem ? nextItem->path : QString();
+    m_previousPhotoFolder = previousItem ? previousItem->path : QString();
+
+    emit navigationChanged();
+    blockNavigation=false;
+    qDebug()<<"EndFindNeibors "<<m_nextPhotoId<<m_nextPhotoFolder<<" - "<<m_previousPhotoId<< m_previousPhotoFolder<<" ! " <<m_selectedPhoto.id;
+
+}
+
+void ScannerController::selectNextPhoto()
+{
+    if (blockNavigation) {qDebug()<<"Navigate before unblock";return;}
+    if (m_nextPhotoId < 0){qDebug()<<"Right border"; return;}
+    if (m_nextPhotoFolder != m_selectedPhoto.path){
+        qDebug()<<"Right boundary crossed";
+        emit folderBoundaryCrossed(m_nextPhotoFolder);
+    }
+    blockNavigation=true;
+    qDebug()<<"selectPhoto";
+    selectPhoto(m_nextPhotoId);
+}
+
+void ScannerController::selectPreviousPhoto()
+{
+    if (blockNavigation) {qDebug()<<"Navigate before unblock";return;}
+    if (m_previousPhotoId < 0){qDebug()<<"Left border"; return;}
+    if (m_previousPhotoFolder != m_selectedPhoto.path){
+        qDebug()<<"Left boundary crossed";
+        emit folderBoundaryCrossed(m_previousPhotoFolder);
+    }
+    blockNavigation=true;
+    qDebug()<<"selectPhoto";
+    selectPhoto(m_previousPhotoId);
+}
+void ScannerController::appendMissingFiles(const QStringList &rows)
+{
+    if (rows.isEmpty())
+        return;
+
+    for (const QString &v : rows) {
+        m_missingFilesText += v + "\n";
+        ++m_missingFilesCount;
+    }
+    emit missingFilesTextChanged();
 }

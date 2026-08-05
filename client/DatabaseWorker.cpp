@@ -86,7 +86,10 @@ void DatabaseWorker::loadFolders(const QString &mediaName)
         }
         emit foldersLoaded(mediaName,folders);
     }
-    else { emit error(query.lastError().text());}
+    else { 
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
+        emit error(query.lastError().text());
+    }
 }
 
 void DatabaseWorker::loadPhotos(const QString &mediaName,const QString &path)
@@ -121,6 +124,7 @@ void DatabaseWorker::loadPhotos(const QString &mediaName,const QString &path)
     }
     else
     {
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
     }
 }
@@ -133,9 +137,7 @@ void DatabaseWorker::loadCache(const QString &media,const QString &relativePath,
     m_cache->clear();
 
     QSqlQuery query(db);
-//    QString safeLabel = QString("'"  media "'");
-//    QString rawSql = QString( "SELECT id, path, file, filesize, lastmodified FROM photobase.photo_images WHERE media_name = %1").arg(safeLabel);
-    query.prepare(R"(SELECT id,path,file,filesize,lastmodified FROM photobase.photo_images WHERE media_name=:media_label and path like :path)");
+    query.prepare(R"(SELECT id,path,file,filesize,date_available FROM photobase.photo_images WHERE media_name=:media_label and path like :path)");
     query.bindValue(":media_label",media);
     query.bindValue(":path",relativePath + "%");
     if(!query.exec())
@@ -153,7 +155,7 @@ void DatabaseWorker::loadCache(const QString &media,const QString &relativePath,
         key.path=query.value("path").toString();
         key.file=query.value("file").toString();
         key.size=query.value("filesize").toLongLong();
-        key.modified=query.value("lastmodified").toDateTime();
+        key.modified=query.value("date_available").toDateTime();
 
         m_cache->insert(key,id);
     }
@@ -168,40 +170,67 @@ int DatabaseWorker::insertPhoto(PhotoRecord &photo)
 {
     QSqlQuery query(db);
 
-    query.prepare(R"(INSERT INTO photobase.photo_images(file,path,ext,filesize,lastmodified,media_name) VALUES (:file,:path:ext,:size,:modified,:media_label) RETURNING id )");
-
+    query.prepare(R"(SELECT count(*) FROM photobase.photo_images WHERE media_name=:media_label AND path=:path AND file=:file)");
     query.bindValue(":file",photo.file);
     query.bindValue(":path",photo.path);
-    query.bindValue(":ext",photo.extension);
-    query.bindValue(":size",photo.fileSize);
-    query.bindValue(":modified",photo.lastModified);
-    query.bindValue(":media_label",MEDIA_LABEL);
+    query.bindValue(":media_label",photo.mediaName);
 
-    if(!query.exec())
+    if(!query.exec()) 
     {
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit status(query.lastError().text());
         return -1;
     }
-
     query.next();
-
-    photo.id=query.value(0).toInt();
-
+    if (query.value(0).toInt()){
+        query.finish();
+        query.prepare(R"(SELECT id FROM photobase.photo_images WHERE media_name=:media_label AND path=:path AND file=:file)");
+        query.bindValue(":file",photo.file);
+        query.bindValue(":path",photo.path);
+        query.bindValue(":media_label",photo.mediaName);
+        if(!query.exec()){
+            qDebug()<<"Ошибка  :"<<query.lastError().text();
+            emit status(query.lastError().text());
+            return -1;
+        }
+        query.next();
+        photo.id=query.value(0).toInt();
+        return -2;
+    }
+    else{    
+        query.finish();
+        query.prepare(R"(INSERT INTO photobase.photo_images(file,path,ext,filesize,date_available,media_name,name) VALUES (:file,:path,:ext,:size,:modified,:media,:name) RETURNING id )");
+        query.bindValue(":file",photo.file);
+        query.bindValue(":path",photo.path);
+        query.bindValue(":ext",photo.extension.left(20));
+        query.bindValue(":size",photo.fileSize);
+        query.bindValue(":modified",photo.dateAvailable);
+        query.bindValue(":media",photo.mediaName);
+        query.bindValue(":name",QFileInfo(photo.file).completeBaseName());
+        if(!query.exec()){
+            qDebug()<<"Ошибка  :"<<query.lastError().text();
+            emit status(query.lastError().text());
+            return -1;
+        }
+        query.next();
+        photo.id=query.value(0).toInt();
+        return photo.id;
+    }
  //   FileKey key;
 //
 //    key.path=photo.path;
 //    key.file=photo.file;
 //    key.size=photo.fileSize;
-//    key.modified=photo.lastModified;
+//    key.modified=photo.dateAvailable;
 
 //    m_cache->insert(key,photo.id);
 
-    return photo.id;
 }
 bool DatabaseWorker::updateExif(
         const PhotoRecord &photo)
 {
-    QSqlQuery query(db);
+
+   QSqlQuery query(db);
 
     query.prepare(R"(UPDATE photobase.photo_images SET maker=:maker,device=:device,
         date_creation=:date,rotation=:rotation,latitude=:lat,longitude=:lon,
@@ -277,6 +306,7 @@ QList<PhotoRecord> DatabaseWorker::getPhotosWithoutThumbnail(const QString &medi
     query.bindValue(":path", pathPrefix + "%");
 
     if (!query.exec()) {
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
         return list;
     }
@@ -340,9 +370,10 @@ void DatabaseWorker::loadPhoto(int id)
         return;
     }
     QSqlQuery query(db);
-    query.prepare(R"(SELECT id,file,path,media_name,name,comment,maker,device,filesize,width,height,ext,md5sum,rotation,latitude,longitude,date_creation,lastmodified FROM photobase.photo_images WHERE id = :id)");
+    query.prepare(R"(SELECT id,file,path,media_name,name,comment,maker,device,filesize,width,height,ext,md5sum,rotation,latitude,longitude,date_creation,date_available FROM photobase.photo_images WHERE id = :id)");
     query.bindValue(":id",id);
     if (!query.exec()){
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit status("loadPhoto error: " + query.lastError().text());
         return;
     }
@@ -369,7 +400,7 @@ void DatabaseWorker::loadPhoto(int id)
     photo.latitude = query.value("latitude").toDouble();
     photo.longitude = query.value("longitude").toDouble();
     photo.dateCreation = query.value("date_creation").toDateTime();
-    photo.lastModified = query.value("lastmodified").toDateTime();
+    photo.dateAvailable = query.value("date_available").toDateTime();
 
     QSqlQuery thumbQuery(db);
     thumbQuery.prepare(R"(SELECT image_data	,width,height FROM photobase.photo_thumbnails WHERE photo_id = :id LIMIT 1)");
@@ -384,7 +415,11 @@ void DatabaseWorker::loadPhoto(int id)
 void DatabaseWorker::loadMediaMounts() {
     QSqlQuery query(db);
     query.prepare("SELECT media_name, mount_point FROM photobase.media_mounts ORDER BY media_name");
-    if (!query.exec()) { emit error(query.lastError().text());return;}
+    if (!query.exec()) { 
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
     QVariantList result;
     while (query.next()) {
         QVariantMap row;
@@ -400,6 +435,7 @@ void DatabaseWorker::saveMountPoint(const QString &media, const QString &mountPo
     query.bindValue(":media", media);
     query.bindValue(":mount", mountPoint);
     if (!query.exec()) {
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
         return;
     }
@@ -411,8 +447,10 @@ void DatabaseWorker::markMissing(int id)
     // WHERE missing_since IS NULL — не перезатираем дату первого обнаружения при повторных проверках
     query.prepare("UPDATE photobase.photo_images SET missing_since = now() WHERE id = :id AND missing_since IS NULL");
     query.bindValue(":id", id);
-    if (!query.exec())
+    if (!query.exec()){
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
+    }
 }
 
 void DatabaseWorker::clearMissing(int id)
@@ -420,8 +458,10 @@ void DatabaseWorker::clearMissing(int id)
     QSqlQuery query(db);
     query.prepare("UPDATE photobase.photo_images SET missing_since = NULL WHERE id = :id AND missing_since IS NOT NULL");
     query.bindValue(":id", id);
-    if (!query.exec())
+    if (!query.exec()){
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
+    }
 }
 
 QList<PhotoRecord> DatabaseWorker::loadPathEntries(const QString &media, const QString &relativePath)
@@ -434,10 +474,10 @@ QList<PhotoRecord> DatabaseWorker::loadPathEntries(const QString &media, const Q
     query.bindValue(":path", relativePath + "%");
 
     if (!query.exec()) {
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
         return list;
     }
-
     while (query.next()) {
         PhotoRecord photo;
         photo.id = query.value(0).toInt();
@@ -456,6 +496,7 @@ QSet<int> DatabaseWorker::loadMissingIds(const QString &media, const QString &re
     query.bindValue(":path", relativePath + "%");
 
     if (!query.exec()) {
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
         return ids;
     }

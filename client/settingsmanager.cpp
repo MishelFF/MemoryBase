@@ -91,33 +91,36 @@ bool SettingsManager::saveApiUrl(const QString& url)
 bool SettingsManager::saveAll(const QString& host, int port, const QString& dbNameV,
                                const QString& user, const QString& password,
                                const QString& apiUrlV)
-{
+{   bool isDBOk=true,isAPIOk=true; 
     if (host.trimmed().isEmpty()) {
         emit errorOccurred("Укажите хост базы данных");
-        return false;
+        isDBOk = false;
     }
     if (dbNameV.trimmed().isEmpty()) {
         emit errorOccurred("Укажите имя базы данных");
-        return false;
+        isDBOk = false;
     }
     if (user.trimmed().isEmpty()) {
         emit errorOccurred("Укажите пользователя БД");
-        return false;
+        isDBOk = false;
     }
 
     QString err;
     if (!isValidApiUrl(apiUrlV, &err)) {
         emit errorOccurred("API URL: " + err);
-        return false;
+        isAPIOk = false;
     }
-
-    setDbHost(host.trimmed());
-    setDbPort(port);
-    setDbName(dbNameV.trimmed());
-    setDbUser(user.trimmed());
-    setDbPassword(password);
-    setApiUrlProp(apiUrlV);
-    m_settings.sync();
-    emit settingsSaved();
-    return true;
+    if (isDBOk){
+        setDbHost(host.trimmed());
+        setDbPort(port);
+        setDbName(dbNameV.trimmed());
+        setDbUser(user.trimmed());
+        setDbPassword(password);
+    }
+    if (isAPIOk) setApiUrlProp(apiUrlV);
+    if (isDBOk||isAPIOk){
+        m_settings.sync();
+        emit settingsSaved();
+    }
+    return isDBOk||isAPIOk;
 }

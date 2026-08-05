@@ -1,11 +1,12 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 // Desktop-раскладка главного экрана: MenuBar сверху, дерево слева +
 // просмотр/импорт справа в SplitView, статус снизу.
 //
-// На Android вместо этого файла Qt подставит qml/+android/PlatformLayout.qml
+// На Android вместо этого файла Qt подставит +android/PlatformLayout.qml
 // (тот же интерфейс: свойства rootFolder/statusMessage, сигналы
 // openFolderDialogRequested/openSettingsDialogRequested, функция handleBack()) —
 // см. механизм QQmlFileSelector.
@@ -16,7 +17,7 @@ Item {
     property string statusMessage: "Не подключен"
     property string pendingAction: ""
     property bool importPanelVisible: false
-/*
+
     signal openFolderDialogRequested()
     signal openSettingsDialogRequested()
 
@@ -41,6 +42,10 @@ Item {
                 MenuItem {
                     text: "Настройки..."
                     onTriggered: root.openSettingsDialogRequested()
+                }
+                MenuItem { 
+                    text: "Активация лицензии..."
+                    onTriggered: licenseDlg.open()
                 }
                 MenuSeparator {}
                 MenuItem {
@@ -85,23 +90,24 @@ Item {
             // слева дерево
             Frame {
                 SplitView.preferredWidth: parent.width * 0.4
-                TreeScreen { anchors.fill: parent }
+                TreeScreen {
+                    anchors.fill: parent
+                }
             }
 
-            // справа предпросмотр / панель импорта
+            // справа предпросмотр / панель импорта.
+            // Loader вместо StackLayout: StackLayout — тоже
+            // QQuickGridLayoutBase и создаёт ОБА экрана сразу (даже
+            // невидимый), из-за чего невидимый ImportScreen проходит
+            // тот же componentComplete/sizeHint, что уже приводил к
+            // ASSERT isnan у PreviewScreen. Loader создаёт содержимое
+            // лениво — только активный экран — как и StackView на
+            // Android.
             Frame {
                 SplitView.fillWidth: true
-                StackLayout {
+                Loader {
                     anchors.fill: parent
-                    currentIndex: root.importPanelVisible ? 1 : 0
-
-                    PreviewScreen {}
-
-                    ImportScreen {
-                        pendingAction: root.pendingAction
-                        rootFolder: root.rootFolder
-                        onCloseRequested: root.importPanelVisible = false
-                    }
+                    sourceComponent: root.importPanelVisible ? importComponent : previewComponent
                 }
             }
         }
@@ -119,5 +125,48 @@ Item {
                 }
             }
         }
-    }*/
+    }
+
+    Component {
+        id: previewComponent
+        PreviewScreen {}
+    }
+
+    Component {
+        id: importComponent
+        ImportScreen {
+            pendingAction: root.pendingAction
+            rootFolder: root.rootFolder
+            onCloseRequested: root.importPanelVisible = false
+        }
+    }
+    MessageDialog {
+        id: messageDialog
+    }
+
+    Connections {
+        target: licenseManager
+
+        function onActivationFailed(message) {
+            messageDialog.title = "Ошибка"
+            messageDialog.text = message
+            messageDialog.open()
+        }
+
+        function onActivationSucceeded() {
+            messageDialog.title = "Успешно"
+            messageDialog.text = "Лицензия активирована."
+            messageDialog.open()
+        }
+        function onActivationStateChanged() {
+        licenseDialog.title = "Лицензия"
+
+        if (licenseManager.isActivated)
+            licenseDialog.text = "Лицензия успешно активирована."
+        else
+            licenseDialog.text = "Лицензия не найдена или недействительна."
+
+        licenseDialog.open()
+        }
+    }
 }

@@ -47,4 +47,31 @@ TreeView {
         var modelIdx = root.modelIndex(cellPoint)
         scannerController.photoTree.expand(modelIdx)
     }
+
+
+    function revealPhoto(key) {
+        if (!key)
+            return
+
+        var idx = root.model.indexForKey(key)
+        if (!idx.valid)
+            return
+
+        root.expandToIndex(idx)
+        root.forceLayout() // строки под новыми раскрытыми узлами должны пересчитаться перед positionViewAtRow
+
+        var row = root.rowAtIndex(idx)
+        if (row >= 0)
+            root.positionViewAtRow(row, Qt.AlignVCenter)
+
+        root.selectionModel.setCurrentIndex(
+            idx, ItemSelectionModel.ClearAndSelect | ItemSelectionModel.Rows)
+    }
+
+    Connections {
+        target: scannerController
+        function onSelectedPhotoChanged() {
+            root.revealPhoto(scannerController.selectedPhotoKey)
+        }
+    }
 }

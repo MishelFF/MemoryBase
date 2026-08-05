@@ -7,6 +7,7 @@
 #define MEDIA_LABEL "WD1000"
 #define THUMB_SIZE 640
 #define CONNECTDATABASE true
+#define USESHORTTASKS false
 #define API_URL "http://localhost:6780/"
 #define MAXFILESIZETOMD5 500000000
 
@@ -22,7 +23,7 @@ struct PhotoRecord
 
     qint64 fileSize = 0;
 
-    QDateTime lastModified;
+    QDateTime dateAvailable;
 
     QString md5;
 

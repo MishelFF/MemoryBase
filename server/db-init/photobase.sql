@@ -85,3 +85,30 @@ ALTER TABLE ONLY "photobase"."photo_images"
 ALTER TABLE ONLY "photobase"."photo_thumbnails"
     ADD CONSTRAINT "photo_thumbnails_photo_id_fkey" FOREIGN KEY (photo_id)
     REFERENCES photobase.photo_images(id) ON DELETE CASCADE NOT DEFERRABLE;
+CREATE TABLE "photobase"."licenses"
+(
+    id                  BIGSERIAL PRIMARY KEY,
+    license_key         VARCHAR(32)  NOT NULL UNIQUE,
+    client              VARCHAR(200) NOT NULL,
+    email               VARCHAR(200),
+    edition             VARCHAR(50)  NOT NULL DEFAULT 'Standard',
+    expires             DATE,
+    enabled             BOOLEAN      NOT NULL DEFAULT TRUE,
+    max_activations     INTEGER      NOT NULL DEFAULT 1,
+    created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE "photobase"."license_activations"
+(
+    id                  BIGSERIAL PRIMARY KEY,
+    license_id          BIGINT NOT NULL REFERENCES licenses(id) ON DELETE CASCADE,
+    machine_id          VARCHAR(64) NOT NULL,
+    activated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (license_id, machine_id)
+);
+
+CREATE INDEX idx_license_key
+    ON photobase.licenses(license_key);
+
+CREATE INDEX idx_activation_machine
+    ON photobase.license_activations(machine_id);

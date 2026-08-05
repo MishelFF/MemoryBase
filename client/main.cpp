@@ -4,6 +4,9 @@
 #include <QTimer>
 #include <QAccessible>
 #include <QQmlFileSelector>
+#include <QDebug>
+
+
 #include "ScannerController.h"
 #include "DirectoryModel.h"
 #include "PhotoTreeModel.h"
@@ -11,6 +14,7 @@
 #include "DatabaseWorker.h"
 #include "ApiWorker.h"
 #include "settingsmanager.h"
+#include "licensemanager.h"
 
 int main(int argc,char *argv[])
 {
@@ -25,9 +29,8 @@ int main(int argc,char *argv[])
     QCoreApplication::setApplicationName("MemoryBase");
 //    auto selector=new QQmlFileSelector(&engine);
 //    selector->setExtraSelectors({"android"});
-    
-    qRegisterMetaType<PhotoRecord>("PhotoRecord");
 
+    qRegisterMetaType<PhotoRecord>("PhotoRecord");
     PhotoRepository *repository;
     bool useDBServer = CONNECTDATABASE;
 
@@ -49,16 +52,21 @@ int main(int argc,char *argv[])
     SettingsManager settingsManager;
     engine.rootContext()->setContextProperty("settingsManager", &settingsManager);
 
-    ScannerController scannerController(repository,&settingsManager,nullptr);
+    LicenseManager licenseManager("http://box/mapi/"); 
+    engine.rootContext()->setContextProperty("licenseManager", &licenseManager);
+ //   licenseManager.checkLicense(); 
+    
+    ScannerController scannerController(repository,&settingsManager,&licenseManager,nullptr);
 
     engine.rootContext()->setContextProperty("scannerController",&scannerController);
-
-
+    
+    
     
     engine.loadFromModule("PhotoDBQml","Main");
-    if(engine.rootObjects().isEmpty()) 
-            settingsManager.openSettingsRequested();
-    
+    if(engine.rootObjects().isEmpty()) {
+        qDebug() << "engine.rootObjects().isEmpty";
+        //settingsManager.openSettingsRequested();
+    }
 
     return app.exec();
     

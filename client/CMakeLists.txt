@@ -60,6 +60,8 @@ set(SOURCES
 
     settingsmanager.cpp
     settingsmanager.h
+    LicenseManager.cpp
+    LicenseManager.h
 
     FileKey.h
     PhotoRecord.h
@@ -76,20 +78,23 @@ find_package(Qt6 REQUIRED COMPONENTS
     Sql
     Network
 )
+find_package(unofficial-sodium CONFIG REQUIRED)
 qt_policy(SET QTP0001 NEW)
 if(ANDROID)
     qt_policy(SET QTP0002 NEW)
 endif()
+qt_policy(SET QTP0004 NEW)
+
 qt_standard_project_setup()
-qt_add_executable(PhotoDB
-    ${SOURCES}
-)
+qt_add_executable(PhotoDB  ${SOURCES})
 
 if(ANDROID)
     set_property(TARGET PhotoDB PROPERTY
         QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
     )
 endif()
+
+set_source_files_properties(Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(PhotoDB
     URI PhotoDBQml
@@ -103,6 +108,7 @@ qt_add_qml_module(PhotoDB
         ImportScreen.qml
         SettingsDialog.qml
         Theme.qml
+        LicenseDialog.qml
 )
 
 # qtquickcontrols2.conf должен лежать в корне ресурсов (":/qtquickcontrols2.conf"),
@@ -124,6 +130,7 @@ target_link_libraries(PhotoDB PRIVATE
     Qt6::Sql
     Qt6::Network
     TinyEXIF
+    unofficial-sodium::sodium
 )
 include(GNUInstallDirs)
 
@@ -138,6 +145,7 @@ if(NOT ANDROID)
         ImportScreen.qml
         SettingsDialog.qml
         Theme.qml
+        LicenseDialog.qml
         DESTINATION ${CMAKE_INSTALL_DATADIR}/PhotoDB/qml)
 
     # QSql PSQL-драйвер (Qt6::Sql) грузит libpq динамически через QLibrary в рантайме,

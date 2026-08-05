@@ -94,7 +94,7 @@ void ApiWorker::loadPhotos(const QString &mediaName, const QString &path) {
             photo.latitude = obj["latitude"].toDouble();
             photo.longitude = obj["longitude"].toDouble();
             photo.dateCreation = QDateTime::fromString(obj["date_creation"].toString(), Qt::ISODate);
-            photo.lastModified = QDateTime::fromString(obj["lastmodified"].toString(), Qt::ISODate);
+            photo.dateAvailable = QDateTime::fromString(obj["date_available"].toString(), Qt::ISODate);
             photo.comment = obj["comment"].toString();
             photos.append(photo);
         }
@@ -138,7 +138,7 @@ void ApiWorker::loadPhoto(int id)
             photo->latitude = obj["latitude"].toDouble();
             photo->longitude = obj["longitude"].toDouble();
             photo->dateCreation = QDateTime::fromString(obj["date_creation"].toString(), Qt::ISODate);
-            photo->lastModified = QDateTime::fromString(obj["lastmodified"].toString(), Qt::ISODate);
+            photo->dateAvailable = QDateTime::fromString(obj["date_available"].toString(), Qt::ISODate);
             photo->comment = obj["comment"].toString();
         }
         propReply->deleteLater();

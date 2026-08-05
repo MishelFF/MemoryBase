@@ -99,10 +99,12 @@ public:
     void clear();
     //void buildTree(const QList<PhotoRecord> &photos);
     Q_INVOKABLE int photoId(const QModelIndex &index) const;// Получение записи фотографии
+    Q_INVOKABLE QModelIndex indexForKey(const QString &key) const;
     void addMedia(const QStringList &media);
     void addFolders(const QString &media,const QStringList &folders);
     void addPhotos(const QString &media,const QString &path,const QList<PhotoRecord> &photos);
-     Q_INVOKABLE void expand(const QModelIndex &index);
+    Q_INVOKABLE void expand(const QModelIndex &index);
+    PhotoTreeItem *itemForPhoto(const QString &media,const QString &path,const QString &name) const;
 signals:
     void requestFolders(QString media);
     void requestPhotos(QString media,QString path);
@@ -112,5 +114,4 @@ private:
     QHash<QString, PhotoTreeItem*> childIndex;
     PhotoTreeItem *findChild(const QString &media,const QString &path,const QString &childName);
     QModelIndex indexFromItem(PhotoTreeItem *item) const;
-
 };

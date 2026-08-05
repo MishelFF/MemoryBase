@@ -8,6 +8,7 @@
 #include "ScannerController.h"
 
 class DatabaseWorker;
+typedef std::vector<PhotoRecord> PhotoChunk;
 
 class ImportTask : public QRunnable {
   public:
@@ -51,15 +52,27 @@ class ThumbnailTask : public QRunnable {
     QPointer<ScannerController> m_controller;
     bool m_reportProgress;
 };
+class ImportComplexTask : public QRunnable {
+  public:
+    ImportComplexTask(const PhotoChunk &photos, DatabaseWorker *database,  ScannerController *controller, int size, int reportFreq);
+    void run() override;
+
+  private:
+    PhotoChunk m_photos;
+    DatabaseWorker *m_database;
+    QPointer<ScannerController> m_controller;
+    int m_reportFreq=1;
+    int m_size=THUMB_SIZE;
+};
 class MissingFileTask : public QRunnable
 {
 public:
-    MissingFileTask(const PhotoRecord &entry, const QString &mountPoint,
+    MissingFileTask(const PhotoChunk &photos, const QString &mountPoint,
                      DatabaseWorker *database, ScannerController *controller, bool reportProgress);
     void run() override;
 
 private:
-    PhotoRecord m_photo;
+    PhotoChunk m_photos;
     QString m_mountPoint;
     DatabaseWorker *m_database;
     QPointer<ScannerController> m_controller;

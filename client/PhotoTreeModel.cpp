@@ -100,6 +100,13 @@ int PhotoTreeModel::photoId(const QModelIndex &index) const
     return item->photo.id;
 }
 
+QModelIndex PhotoTreeModel::indexForKey(const QString &key) const
+{
+    PhotoTreeItem *item = childIndex.value(key, nullptr);
+    return indexFromItem(item);
+}
+
+
 void PhotoTreeModel::clear()
 {
     beginResetModel();
@@ -189,6 +196,12 @@ void PhotoTreeModel::addPhotos(const QString &media, const QString &path, const 
     folderItem->photosLoaded = true;
     endInsertRows();
 }
+
+PhotoTreeItem *PhotoTreeModel::itemForPhoto(const QString &media, const QString &path, const QString &name) const
+{
+    return childIndex.value(PhotoTreeItem::GetKey(media, path, name), nullptr);
+}
+
 /*void PhotoTreeModel::buildTree(
         const QList<PhotoRecord> &photos)
 {

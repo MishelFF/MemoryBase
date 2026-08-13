@@ -3,6 +3,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkReply>
+#include <QImage>
 
 ApiWorker::ApiWorker(QObject *parent) : PhotoRepository(parent) { 
     manager = new QNetworkAccessManager(this);
@@ -94,7 +95,7 @@ void ApiWorker::loadPhotos(const QString &mediaName, const QString &path) {
             photo.latitude = obj["latitude"].toDouble();
             photo.longitude = obj["longitude"].toDouble();
             photo.dateCreation = QDateTime::fromString(obj["date_creation"].toString(), Qt::ISODate);
-            photo.lastModified = QDateTime::fromString(obj["lastmodified"].toString(), Qt::ISODate);
+            photo.dateAvailable = QDateTime::fromString(obj["date_available"].toString(), Qt::ISODate);
             photo.comment = obj["comment"].toString();
             photos.append(photo);
         }
@@ -138,7 +139,7 @@ void ApiWorker::loadPhoto(int id)
             photo->latitude = obj["latitude"].toDouble();
             photo->longitude = obj["longitude"].toDouble();
             photo->dateCreation = QDateTime::fromString(obj["date_creation"].toString(), Qt::ISODate);
-            photo->lastModified = QDateTime::fromString(obj["lastmodified"].toString(), Qt::ISODate);
+            photo->dateAvailable = QDateTime::fromString(obj["date_available"].toString(), Qt::ISODate);
             photo->comment = obj["comment"].toString();
         }
         propReply->deleteLater();
@@ -170,4 +171,22 @@ void ApiWorker::saveMountPoint(const QString &media, const QString &mountPoint)
 {
     Q_UNUSED(media);
     Q_UNUSED(mountPoint);
+}
+void ApiWorker::loadPersons(){}
+void ApiWorker::loadUnresolvedRegions(){};
+void ApiWorker::loadRegionsForPerson(int personId){Q_UNUSED(personId);};
+void ApiWorker::createPerson(const QString &displayName){Q_UNUSED(displayName);};
+void ApiWorker::assignRegionToPerson(int regionId, int personId){
+    Q_UNUSED(regionId);
+    Q_UNUSED(personId);
+};
+void ApiWorker::setPersonReference(int personId, int regionId){
+    Q_UNUSED(regionId);
+    Q_UNUSED(personId);
+};
+void ApiWorker::unassignRegion(int regionId){Q_UNUSED(regionId);};
+QImage ApiWorker::loadChipImage(const QString &id, QSize *size, const QSize & /*requestedSize*/) {
+    Q_UNUSED(id);
+    Q_UNUSED(size);
+    return QImage();
 }

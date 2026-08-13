@@ -85,3 +85,82 @@ ALTER TABLE ONLY "photobase"."photo_images"
 ALTER TABLE ONLY "photobase"."photo_thumbnails"
     ADD CONSTRAINT "photo_thumbnails_photo_id_fkey" FOREIGN KEY (photo_id)
     REFERENCES photobase.photo_images(id) ON DELETE CASCADE NOT DEFERRABLE;
+CREATE TABLE "photobase"."licenses"
+(
+    id                  BIGSERIAL PRIMARY KEY,
+    license_key         VARCHAR(32)  NOT NULL UNIQUE,
+    client              VARCHAR(200) NOT NULL,
+    email               VARCHAR(200),
+    edition             VARCHAR(50)  NOT NULL DEFAULT 'Standard',
+    expires             DATE,
+    enabled             BOOLEAN      NOT NULL DEFAULT TRUE,
+    max_activations     INTEGER      NOT NULL DEFAULT 1,
+    created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE "photobase"."license_activations"
+(
+    id                  BIGSERIAL PRIMARY KEY,
+    license_id          BIGINT NOT NULL REFERENCES licenses(id) ON DELETE CASCADE,
+    machine_id          VARCHAR(64) NOT NULL,
+    activated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (license_id, machine_id)
+);
+
+CREATE INDEX idx_license_key
+    ON photobase.licenses(license_key);
+
+CREATE INDEX idx_activation_machine
+    ON photobase.license_activations(machine_id);
+
+CREATE TABLE photobase.people (
+    id           SERIAL PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    notes        TEXT,
+	reference_chip             BYTEA,
+    reference_descriptor       vector(128),
+	reference_descriptor_bytes BYTEA,
+    reference_descriptor_model TEXT,
+    reference_source_region_id INTEGER REFERENCES photobase.photo_regions(id) ON DELETE SET NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE photobase.people_aliases (
+    id        SERIAL PRIMARY KEY,
+    person_id INTEGER NOT NULL REFERENCES photobase.people(id) ON DELETE CASCADE,
+    alias     TEXT NOT NULL,
+    source    TEXT, 
+    UNIQUE (alias) 
+);
+
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE TABLE photobase.photo_regions (
+    id                      SERIAL PRIMARY KEY,
+    photo_id                INTEGER NOT NULL REFERENCES photobase.photo_images(id) ON DELETE CASCADE,
+    region_type             TEXT NOT NULL,
+    source                  TEXT NOT NULL DEFAULT 'acdsee', -- 'acdsee' | 'digikam' | 'dlib' — кто породил строку
+	face_name               TEXT,
+    person_id 				INTEGER REFERENCES photobase.people(id) ON DELETE SET NULL;
+    -- Геометрия (как раньше)
+    dly_x                   DOUBLE PRECISION NOT NULL,
+    dly_y                   DOUBLE PRECISION NOT NULL,
+    dly_w                   DOUBLE PRECISION NOT NULL,
+    dly_h                   DOUBLE PRECISION NOT NULL,
+    alg_x                   DOUBLE PRECISION,
+    alg_y                   DOUBLE PRECISION,
+    alg_w                   DOUBLE PRECISION,
+    alg_h                   DOUBLE PRECISION,
+    applied_to_w            INTEGER,
+    applied_to_h            INTEGER,
+    face_chip			        BYTEA,       
+
+    -- Дескриптор — оба представления одновременно
+    descriptor              vector(128), -- dlib_face_recognition_resnet_model_v1 = 128; поправьте, если модель другая
+    descriptor_bytes        BYTEA,       -- те же значения плоским массивом — задел под Postgres-независимый режим
+    descriptor_model        TEXT,        -- имя/версия модели — дескрипторы разных моделей несравнимы между собой
+    descriptor_computed_at  TIMESTAMPTZ
+);
+
+CREATE INDEX idx_photo_regions_photo_id ON photobase.photo_regions(photo_id);
+
+-- CREATE INDEX idx_photo_regions_descriptor ON photobase.photo_regions
+--     USING ivfflat (descriptor vector_cosine_ops) WITH (lists = 100);

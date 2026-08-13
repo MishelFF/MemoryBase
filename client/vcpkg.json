@@ -1,0 +1,32 @@
+{
+    "name": "photodb",
+    "version": "1.0.0",
+    "builtin-baseline": "cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3",
+
+    "dependencies": [
+        "libpq",
+        "libsodium"
+    ],
+    "default-features": [
+        "face-lite"
+    ],
+    "features": {
+        "face-lite": {
+            "description": "Lightweight face recognition implementation",
+            "dependencies": []
+        },
+
+        "face-full": {
+            "description": "Full optimized dlib face recognition implementation",
+            "dependencies": [
+                "dlib",
+                {
+                    "name": "openblas",
+                    "features": [
+                        "threads"
+                    ]
+                }
+            ]
+        }
+    }
+}

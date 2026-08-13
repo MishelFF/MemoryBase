@@ -40,12 +40,12 @@ Dialog {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 8
+        spacing: Theme.spacingSm
 
         GridLayout {
             columns: 2
-            columnSpacing: 10
-            rowSpacing: 8
+            columnSpacing: Theme.spacingMd
+            rowSpacing: Theme.spacingSm
             Layout.fillWidth: true
 
             Label { text: "Хост БД:" }
@@ -81,13 +81,13 @@ Dialog {
                 id: apiUrlField
                 Layout.fillWidth: true
                 color: settingsManager.isValidApiUrl(text) || text.length === 0
-                       ? "black" : "red"
+                       ? Theme.textPrimary : Theme.danger
             }
         }
 
         Label {
             id: errorLabel
-            color: "red"
+            color: Theme.danger
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
         }

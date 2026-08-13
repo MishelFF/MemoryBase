@@ -6,7 +6,7 @@ header("Content-Type: application/json");
 
 $id = $_GET["id"];
 
-$stmt = $db->prepare("SELECT id, file, width, height, date_creation, comment, device, maker, filesize, ext, path, media_name, md5sum, rotation, latitude, longitude, lastmodified FROM photobase.photo_images WHERE id=:id");
+$stmt = $db->prepare("SELECT id, file, width, height, date_creation, comment, device, maker, filesize, ext, path, media_name, md5sum, rotation, latitude, longitude, date_available FROM photobase.photo_images WHERE id=:id");
 
 $stmt->execute([":id" => $id]);
 

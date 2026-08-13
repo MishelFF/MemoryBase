@@ -2,6 +2,7 @@
 
 #include <QNetworkAccessManager>
 #include <QUrlQuery>
+#include <QImage>
 #include "PhotoRepository.h"
 #include "PhotoRecord.h"
 
@@ -22,6 +23,15 @@ public slots:
     void loadPhoto(int id) override;
     void loadMediaMounts() override;
     void saveMountPoint(const QString &media, const QString &mountPoint) override;
+    void loadPersons() override;
+    void loadUnresolvedRegions() override;
+    void loadRegionsForPerson(int personId) override;
+    void createPerson(const QString &displayName) override;
+    void assignRegionToPerson(int regionId, int personId) override;
+    void setPersonReference(int personId, int regionId) override;
+    void unassignRegion(int regionId) override;
+    QImage loadChipImage(const QString &id, QSize *size, const QSize & /*requestedSize*/) override;
+
 private:
 
     QNetworkAccessManager *manager;

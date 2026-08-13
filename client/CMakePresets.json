@@ -6,10 +6,16 @@
             "hidden": true,
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build/${presetName}",
+            "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
             "condition": {
                 "type": "equals",
                 "lhs": "${hostSystemName}",
                 "rhs": "Linux"
+            },
+            "cacheVariables": {
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}",
+                "CMAKE_C_FLAGS": "-march=x86-64-v2 -mno-avx -mno-avx2",
+                "CMAKE_CXX_FLAGS": "-march=x86-64-v2 -mno-avx -mno-avx2"
             }
         },
         {
@@ -17,7 +23,8 @@
             "displayName": "Linux Debug (system Qt6)",
             "inherits": "linux-base",
             "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug"
+                "CMAKE_BUILD_TYPE": "Debug",
+                "VCPKG_MANIFEST_FEATURES": "face-lite"
             }
         },
         {
@@ -25,7 +32,28 @@
             "displayName": "Linux Release (system Qt6)",
             "inherits": "linux-base",
             "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release"
+                "CMAKE_BUILD_TYPE": "Release",
+                "VCPKG_MANIFEST_FEATURES": "face-lite"
+            }
+        },
+        {
+            "name": "linux-full-release",
+            "displayName": "Linux (Face Full)",
+            "description": "Linux Full: vcpkg dlib + OpenBLAS.",
+            "inherits": "linux-base",
+                "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "VCPKG_MANIFEST_FEATURES": "face-full"
+            }
+        },
+        {
+            "name": "linux-full-debug",
+            "displayName": "Linux (Face Full)",
+            "description": "Linux Full: vcpkg dlib + OpenBLAS.",
+            "inherits": "linux-base",
+                "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "VCPKG_MANIFEST_FEATURES": "face-full"
             }
         },
         {
@@ -33,6 +61,7 @@
             "hidden": true,
             "generator": "Ninja Multi-Config",
             "binaryDir": "${sourceDir}/build/${presetName}",
+            "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
             "condition": {
                 "type": "equals",
                 "lhs": "${hostSystemName}",
@@ -42,14 +71,61 @@
                 "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}",
                 "CMAKE_C_COMPILER": "cl.exe",
                 "CMAKE_CXX_COMPILER": "cl.exe"
+            },
+            "environment": {
+                "_comment": "Ninja не находит cl.exe сам — либо запускайте из Developer Command Prompt, либо пропишите здесь PATH/INCLUDE/LIB из vcvarsall.bat"
             }
-           
         },
         {
             "name": "windows-msvc",
             "displayName": "Windows (Ninja Multi-Config, MSVC amd64)",
             "description": "Multi-config MSVC build via Ninja; Debug/Release chosen at build time. CMAKE_PREFIX_PATH (Qt) задаётся в CMakeUserPresets.json",
-            "inherits": "windows-msvc-base"
+            "inherits": "windows-msvc-base",
+            "cacheVariables": {"VCPKG_MANIFEST_FEATURES": "face-lite"}
+
+        },
+        {
+            "name": "windows-msvc-full",
+            "displayName": "Windows (Ninja Multi-Config, MSVC amd64, Face Full)",
+            "description": "Производительная сборка через vcpkg dlib + OpenBLAS.",
+            "inherits": "windows-msvc-base",
+            "cacheVariables": {
+                "VCPKG_MANIFEST_FEATURES": "face-full"
+            }
+        },
+        {
+            "name": "android-base",
+            "hidden": true,
+            "description": "Требует QT_ROOT_DIR (Android-сборка Qt под нужный ABI), QT_HOST_PATH (desktop-сборка Qt для moc/androiddeployqt) и ANDROID_NDK_ROOT в окружении",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "toolchainFile": "$env{QT_ROOT_DIR}/lib/cmake/Qt6/qt.toolchain.cmake",
+            "cacheVariables": {
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "QT_HOST_PATH": "$env{QT_HOST_PATH}",
+                "ANDROID_NDK_ROOT": "$env{ANDROID_NDK_ROOT}",
+                "ANDROID_PLATFORM": "android-24",
+                "ANDROID_STL": "c++_shared",
+                "QT_ANDROID_BUILD_ALL_ABIS": "OFF",
+                "VCPKG_MANIFEST_FEATURES": "face-lite"
+            }
+        },
+        {
+            "name": "android",
+            "displayName": "Android (arm64-v8a, устройство)",
+            "inherits": "android-base",
+            "cacheVariables": {
+                "ANDROID_ABI": "arm64-v8a"
+            }
+        },
+        {
+            "name": "android-x86_64",
+            "displayName": "Android (x86_64, эмулятор)",
+            "inherits": "android-base",
+            "cacheVariables": {
+                "ANDROID_ABI": "x86_64"
+            }
         }
     ],
     "buildPresets": [
@@ -62,6 +138,14 @@
             "configurePreset": "linux-release"
         },
         {
+            "name": "linux-full-debug",
+            "configurePreset": "linux-full-debug"
+        },
+        {
+            "name": "linux-full-release",
+            "configurePreset": "linux-full-release"
+        },
+        {
             "name": "windows-msvc-debug",
             "displayName": "Windows amd64 - Debug",
             "configurePreset": "windows-msvc",
@@ -72,6 +156,30 @@
             "displayName": "Windows amd64 - Release",
             "configurePreset": "windows-msvc",
             "configuration": "Release"
+        },
+                {
+            "name": "windows-msvc-full-debug",
+            "displayName": "Windows amd64 - Face Full - Debug",
+            "configurePreset": "windows-msvc-full",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-msvc-full-release",
+            "displayName": "Windows amd64 - Face Full - Release",
+            "configurePreset": "windows-msvc-full",
+            "configuration": "Release"
+        },
+        {
+            "name": "android-apk",
+            "displayName": "Android Debug APK (устройство, arm64-v8a)",
+            "configurePreset": "android",
+            "targets": [ "apk" ]
+        },
+        {
+            "name": "android-x86_64-apk",
+            "displayName": "Android Debug APK (эмулятор, x86_64)",
+            "configurePreset": "android-x86_64",
+            "targets": [ "apk" ]
         }
     ]
 }

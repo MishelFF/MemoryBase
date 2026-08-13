@@ -8,9 +8,11 @@
 #include <QDebug>
 #include <QDir>
 #include <QFileInfo>
+#include <QImage>
 
 #include "DatabaseWorker.h"
 #include "settingsmanager.h"
+#include "PhotoFilter.h"
 
 DatabaseWorker::DatabaseWorker(QObject *parent) : PhotoRepository(parent)
 {
@@ -86,7 +88,10 @@ void DatabaseWorker::loadFolders(const QString &mediaName)
         }
         emit foldersLoaded(mediaName,folders);
     }
-    else { emit error(query.lastError().text());}
+    else { 
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
+        emit error(query.lastError().text());
+    }
 }
 
 void DatabaseWorker::loadPhotos(const QString &mediaName,const QString &path)
@@ -121,6 +126,7 @@ void DatabaseWorker::loadPhotos(const QString &mediaName,const QString &path)
     }
     else
     {
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
     }
 }
@@ -133,9 +139,7 @@ void DatabaseWorker::loadCache(const QString &media,const QString &relativePath,
     m_cache->clear();
 
     QSqlQuery query(db);
-//    QString safeLabel = QString("'"  media "'");
-//    QString rawSql = QString( "SELECT id, path, file, filesize, lastmodified FROM photobase.photo_images WHERE media_name = %1").arg(safeLabel);
-    query.prepare(R"(SELECT id,path,file,filesize,lastmodified FROM photobase.photo_images WHERE media_name=:media_label and path like :path)");
+    query.prepare(R"(SELECT id,path,file,filesize,date_available FROM photobase.photo_images WHERE media_name=:media_label and path like :path)");
     query.bindValue(":media_label",media);
     query.bindValue(":path",relativePath + "%");
     if(!query.exec())
@@ -153,7 +157,7 @@ void DatabaseWorker::loadCache(const QString &media,const QString &relativePath,
         key.path=query.value("path").toString();
         key.file=query.value("file").toString();
         key.size=query.value("filesize").toLongLong();
-        key.modified=query.value("lastmodified").toDateTime();
+        key.modified=query.value("date_available").toDateTime();
 
         m_cache->insert(key,id);
     }
@@ -168,40 +172,67 @@ int DatabaseWorker::insertPhoto(PhotoRecord &photo)
 {
     QSqlQuery query(db);
 
-    query.prepare(R"(INSERT INTO photobase.photo_images(file,path,ext,filesize,lastmodified,media_name) VALUES (:file,:path:ext,:size,:modified,:media_label) RETURNING id )");
-
+    query.prepare(R"(SELECT count(*) FROM photobase.photo_images WHERE media_name=:media_label AND path=:path AND file=:file)");
     query.bindValue(":file",photo.file);
     query.bindValue(":path",photo.path);
-    query.bindValue(":ext",photo.extension);
-    query.bindValue(":size",photo.fileSize);
-    query.bindValue(":modified",photo.lastModified);
-    query.bindValue(":media_label",MEDIA_LABEL);
+    query.bindValue(":media_label",photo.mediaName);
 
-    if(!query.exec())
+    if(!query.exec()) 
     {
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit status(query.lastError().text());
         return -1;
     }
-
     query.next();
-
-    photo.id=query.value(0).toInt();
-
+    if (query.value(0).toInt()){
+        query.finish();
+        query.prepare(R"(SELECT id FROM photobase.photo_images WHERE media_name=:media_label AND path=:path AND file=:file)");
+        query.bindValue(":file",photo.file);
+        query.bindValue(":path",photo.path);
+        query.bindValue(":media_label",photo.mediaName);
+        if(!query.exec()){
+            qDebug()<<"Ошибка  :"<<query.lastError().text();
+            emit status(query.lastError().text());
+            return -1;
+        }
+        query.next();
+        photo.id=query.value(0).toInt();
+        return -2;
+    }
+    else{    
+        query.finish();
+        query.prepare(R"(INSERT INTO photobase.photo_images(file,path,ext,filesize,date_available,media_name,name) VALUES (:file,:path,:ext,:size,:modified,:media,:name) RETURNING id )");
+        query.bindValue(":file",photo.file);
+        query.bindValue(":path",photo.path);
+        query.bindValue(":ext",photo.extension.left(20));
+        query.bindValue(":size",photo.fileSize);
+        query.bindValue(":modified",photo.dateAvailable);
+        query.bindValue(":media",photo.mediaName);
+        query.bindValue(":name",QFileInfo(photo.file).completeBaseName());
+        if(!query.exec()){
+            qDebug()<<"Ошибка  :"<<query.lastError().text();
+            emit status(query.lastError().text());
+            return -1;
+        }
+        query.next();
+        photo.id=query.value(0).toInt();
+        return photo.id;
+    }
  //   FileKey key;
 //
 //    key.path=photo.path;
 //    key.file=photo.file;
 //    key.size=photo.fileSize;
-//    key.modified=photo.lastModified;
+//    key.modified=photo.dateAvailable;
 
 //    m_cache->insert(key,photo.id);
 
-    return photo.id;
 }
 bool DatabaseWorker::updateExif(
         const PhotoRecord &photo)
 {
-    QSqlQuery query(db);
+
+   QSqlQuery query(db);
 
     query.prepare(R"(UPDATE photobase.photo_images SET maker=:maker,device=:device,
         date_creation=:date,rotation=:rotation,latitude=:lat,longitude=:lon,
@@ -277,6 +308,7 @@ QList<PhotoRecord> DatabaseWorker::getPhotosWithoutThumbnail(const QString &medi
     query.bindValue(":path", pathPrefix + "%");
 
     if (!query.exec()) {
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
         return list;
     }
@@ -340,9 +372,10 @@ void DatabaseWorker::loadPhoto(int id)
         return;
     }
     QSqlQuery query(db);
-    query.prepare(R"(SELECT id,file,path,media_name,name,comment,maker,device,filesize,width,height,ext,md5sum,rotation,latitude,longitude,date_creation,lastmodified FROM photobase.photo_images WHERE id = :id)");
+    query.prepare(R"(SELECT id,file,path,media_name,name,comment,maker,device,filesize,width,height,ext,md5sum,rotation,latitude,longitude,date_creation,date_available FROM photobase.photo_images WHERE id = :id)");
     query.bindValue(":id",id);
     if (!query.exec()){
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit status("loadPhoto error: " + query.lastError().text());
         return;
     }
@@ -369,7 +402,7 @@ void DatabaseWorker::loadPhoto(int id)
     photo.latitude = query.value("latitude").toDouble();
     photo.longitude = query.value("longitude").toDouble();
     photo.dateCreation = query.value("date_creation").toDateTime();
-    photo.lastModified = query.value("lastmodified").toDateTime();
+    photo.dateAvailable = query.value("date_available").toDateTime();
 
     QSqlQuery thumbQuery(db);
     thumbQuery.prepare(R"(SELECT image_data	,width,height FROM photobase.photo_thumbnails WHERE photo_id = :id LIMIT 1)");
@@ -384,7 +417,11 @@ void DatabaseWorker::loadPhoto(int id)
 void DatabaseWorker::loadMediaMounts() {
     QSqlQuery query(db);
     query.prepare("SELECT media_name, mount_point FROM photobase.media_mounts ORDER BY media_name");
-    if (!query.exec()) { emit error(query.lastError().text());return;}
+    if (!query.exec()) { 
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
     QVariantList result;
     while (query.next()) {
         QVariantMap row;
@@ -400,6 +437,7 @@ void DatabaseWorker::saveMountPoint(const QString &media, const QString &mountPo
     query.bindValue(":media", media);
     query.bindValue(":mount", mountPoint);
     if (!query.exec()) {
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
         return;
     }
@@ -411,8 +449,10 @@ void DatabaseWorker::markMissing(int id)
     // WHERE missing_since IS NULL — не перезатираем дату первого обнаружения при повторных проверках
     query.prepare("UPDATE photobase.photo_images SET missing_since = now() WHERE id = :id AND missing_since IS NULL");
     query.bindValue(":id", id);
-    if (!query.exec())
+    if (!query.exec()){
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
+    }
 }
 
 void DatabaseWorker::clearMissing(int id)
@@ -420,8 +460,10 @@ void DatabaseWorker::clearMissing(int id)
     QSqlQuery query(db);
     query.prepare("UPDATE photobase.photo_images SET missing_since = NULL WHERE id = :id AND missing_since IS NOT NULL");
     query.bindValue(":id", id);
-    if (!query.exec())
+    if (!query.exec()){
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
+    }
 }
 
 QList<PhotoRecord> DatabaseWorker::loadPathEntries(const QString &media, const QString &relativePath)
@@ -434,10 +476,10 @@ QList<PhotoRecord> DatabaseWorker::loadPathEntries(const QString &media, const Q
     query.bindValue(":path", relativePath + "%");
 
     if (!query.exec()) {
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
         return list;
     }
-
     while (query.next()) {
         PhotoRecord photo;
         photo.id = query.value(0).toInt();
@@ -456,10 +498,479 @@ QSet<int> DatabaseWorker::loadMissingIds(const QString &media, const QString &re
     query.bindValue(":path", relativePath + "%");
 
     if (!query.exec()) {
+        qDebug()<<"Ошибка  :"<<query.lastError().text();
         emit error(query.lastError().text());
         return ids;
     }
     while (query.next())
         ids.insert(query.value(0).toInt());
     return ids;
+}
+
+bool DatabaseWorker::insertRegions(int photoId, const QList<PhotoRegion> &regions)
+{
+    if (regions.isEmpty())
+        return true;
+
+    if (!db.transaction()) {
+        emit error(db.lastError().text());
+        return false;
+    }
+
+    QSqlQuery del(db);
+    del.prepare("DELETE FROM photobase.photo_regions WHERE photo_id = :id");
+    del.bindValue(":id", photoId);
+    if (!del.exec()) {
+        qDebug()<<"Ошибка  :"<<del.lastError().text();
+        db.rollback();
+        emit error(del.lastError().text());
+        return false;
+    }
+
+    for (const PhotoRegion &r : regions) {
+        // descriptor вставляем как литерал прямо в текст запроса — параметризация
+        // ломается на неизвестном Qt-драйверу типе vector (см. пояснение выше),
+        // а тут инъекции взяться неоткуда, значения строим сами из float
+        QString descriptorSql = "NULL";
+        if (!r.descriptor.isEmpty()) {
+            QStringList parts;
+            parts.reserve(r.descriptor.size());
+            for (float v : r.descriptor)
+                parts << QString::number(v, 'g', 9);
+            descriptorSql = "CAST('[" + parts.join(',') + "]' AS photobase.vector)";
+        }
+
+        QSqlQuery query(db);
+        if (!query.prepare(QStringLiteral(R"(
+            INSERT INTO photobase.photo_regions
+                (photo_id, region_type, source, face_name, face_chip,
+                 dly_x, dly_y, dly_w, dly_h, alg_x, alg_y, alg_w, alg_h,
+                 applied_to_w, applied_to_h,
+                 descriptor, descriptor_bytes, descriptor_model, descriptor_computed_at)
+            VALUES
+                (:photo_id, :region_type, :source, :face_name, :face_chip,
+                 :dly_x, :dly_y, :dly_w, :dly_h, :alg_x, :alg_y, :alg_w, :alg_h,
+                 :applied_w, :applied_h,
+                 %1, :descriptor_bytes, :descriptor_model, :descriptor_at)
+        )").arg(descriptorSql))){
+            qDebug() << "Ошибка PREPARE:" << query.lastError().text();
+            db.rollback();
+            emit error(query.lastError().text());
+            return false;
+        }
+        query.bindValue(":photo_id", photoId);
+        query.bindValue(":region_type", r.type);
+        query.bindValue(":source", r.source.isEmpty() ? QStringLiteral("acdsee") : r.source);
+        query.bindValue(":face_name", r.name.isEmpty() ? QVariant(QVariant::String) : QVariant(r.name));
+        query.bindValue(":face_chip", r.faceChip.isEmpty() ? QVariant(QVariant::ByteArray) : QVariant(r.faceChip));
+        query.bindValue(":dly_x", r.dlyX);
+        query.bindValue(":dly_y", r.dlyY);
+        query.bindValue(":dly_w", r.dlyW);
+        query.bindValue(":dly_h", r.dlyH);
+        query.bindValue(":alg_x", r.hasAlg ? QVariant(r.algX) : QVariant());
+        query.bindValue(":alg_y", r.hasAlg ? QVariant(r.algY) : QVariant());
+        query.bindValue(":alg_w", r.hasAlg ? QVariant(r.algW) : QVariant());
+        query.bindValue(":alg_h", r.hasAlg ? QVariant(r.algH) : QVariant());
+        query.bindValue(":applied_w", r.appliedToWidth);
+        query.bindValue(":applied_h", r.appliedToHeight);
+
+        if (r.descriptor.isEmpty()) {
+            query.bindValue(":descriptor_bytes", QVariant(QVariant::ByteArray));
+            query.bindValue(":descriptor_model", QVariant(QVariant::String));
+            query.bindValue(":descriptor_at", QVariant(QVariant::DateTime));
+        } else {
+            QByteArray descBytes(reinterpret_cast<const char *>(r.descriptor.constData()),
+                                  int(r.descriptor.size() * sizeof(float)));
+            query.bindValue(":descriptor_bytes", descBytes);
+            query.bindValue(":descriptor_model", r.descriptorModel);
+            query.bindValue(":descriptor_at", QDateTime::currentDateTimeUtc());
+        }
+
+        if (!query.exec()) {
+            qDebug()<<"Ошибка  :"<<query.lastError().text();
+            db.rollback();
+            emit error(query.lastError().text());
+            return false;
+        }
+    }
+
+    if (!db.commit()) {
+        emit error(db.lastError().text());
+        return false;
+    }
+    return true;
+}
+bool DatabaseWorker::setReferenceFace(int personId, int regionId)
+{
+    QSqlQuery query(db);
+    if (!query.prepare(R"(
+        UPDATE photobase.people
+        SET reference_chip = src.face_chip,
+            reference_descriptor = src.descriptor,
+            reference_descriptor_model = src.descriptor_model,
+            reference_source_region_id = src.id
+        FROM photobase.photo_regions src
+        WHERE photobase.people.id = :person_id
+          AND src.id = :region_id
+    )")) {
+        qDebug() << "Ошибка PREPARE (setReferenceFace):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return false;
+    }
+
+    query.bindValue(":person_id", personId);
+    query.bindValue(":region_id", regionId);
+
+    if (!query.exec()) {
+        qDebug() << "Ошибка EXEC (setReferenceFace):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return false;
+    }
+    return true;
+}
+QVector<QPair<int, double>> DatabaseWorker::findSimilarFaces(int regionId, double threshold, int limit)
+{
+    QVector<QPair<int, double>> result;
+
+    QSqlQuery query(db);
+    if (!query.prepare(R"(
+        SELECT pr.id, pr.descriptor <-> target.descriptor AS distance
+        FROM photobase.photo_regions pr
+        CROSS JOIN (
+            SELECT descriptor FROM photobase.photo_regions WHERE id = :target_id
+        ) AS target
+        WHERE pr.id <> :target_id
+          AND pr.descriptor IS NOT NULL
+          AND pr.descriptor <-> target.descriptor < :threshold
+        ORDER BY distance
+        LIMIT :limit
+    )")) {
+        qDebug() << "Ошибка PREPARE (similar):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return result;
+    }
+
+    query.bindValue(":target_id", regionId);
+    query.bindValue(":threshold", threshold);
+    query.bindValue(":limit", limit);
+
+    if (!query.exec()) {
+        qDebug() << "Ошибка EXEC (similar):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return result;
+    }
+
+    while (query.next())
+        result.append({query.value(0).toInt(), query.value(1).toDouble()});
+
+    return result;
+}
+void DatabaseWorker::loadPersons()
+{
+    QList<PersonRecord> result;
+
+    QSqlQuery query(db);
+    if (!query.exec(R"(
+        SELECT id, display_name, reference_chip IS NOT NULL AS has_reference
+        FROM photobase.people
+        ORDER BY display_name
+    )")) {
+        qDebug() << "Ошибка EXEC (loadPersons):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+
+    while (query.next()) {
+        PersonRecord person;
+        person.id = query.value(0).toInt();
+        person.displayName = query.value(1).toString();
+        person.hasReference = query.value(2).toBool();
+        result.append(person);
+    }
+
+    emit personsLoaded(result);
+}
+
+void DatabaseWorker::loadUnresolvedRegions()
+{
+    QList<FaceRegionRecord> result;
+
+    QSqlQuery query(db);
+    if (!query.exec(R"(
+        SELECT id, photo_id, face_name
+        FROM photobase.photo_regions
+        WHERE person_id IS NULL
+        ORDER BY photo_id, id
+    )")) {
+        qDebug() << "Ошибка EXEC (loadUnresolvedRegions):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+
+    while (query.next()) {
+        FaceRegionRecord region;
+        region.id = query.value(0).toInt();
+        region.photoId = query.value(1).toInt();
+        region.faceName = query.value(2).toString();
+        result.append(region);
+    }
+
+    emit unresolvedRegionsLoaded(result);
+}
+
+void DatabaseWorker::loadRegionsForPerson(int personId)
+{
+    QList<FaceRegionRecord> result;
+
+    QSqlQuery query(db);
+    query.prepare(R"(
+        SELECT id, photo_id, face_name
+        FROM photobase.photo_regions
+        WHERE person_id = :person_id
+        ORDER BY photo_id, id
+    )");
+    query.bindValue(":person_id", personId);
+
+    if (!query.exec()) {
+        qDebug() << "Ошибка EXEC (loadRegionsForPerson):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+
+    while (query.next()) {
+        FaceRegionRecord region;
+        region.id = query.value(0).toInt();
+        region.photoId = query.value(1).toInt();
+        region.faceName = query.value(2).toString();
+        result.append(region);
+    }
+
+    emit personRegionsLoaded(personId, result);
+}
+
+void DatabaseWorker::createPerson(const QString &displayName)
+{
+    QSqlQuery query(db);
+    query.prepare(R"(
+        INSERT INTO photobase.people (display_name)
+        VALUES (:display_name)
+        RETURNING id
+    )");
+    query.bindValue(":display_name", displayName);
+
+    if (!query.exec() || !query.next()) {
+        qDebug() << "Ошибка EXEC (createPerson):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+
+    PersonRecord person;
+    person.id = query.value(0).toInt();
+    person.displayName = displayName;
+    person.hasReference = false;
+
+    emit personCreated(person);
+}
+
+void DatabaseWorker::assignRegionToPerson(int regionId, int personId)
+{
+    QSqlQuery query(db);
+    query.prepare(R"(
+        UPDATE photobase.photo_regions
+        SET person_id = :person_id
+        WHERE id = :region_id
+    )");
+    query.bindValue(":person_id", personId);
+    query.bindValue(":region_id", regionId);
+
+    if (!query.exec()) {
+        qDebug() << "Ошибка EXEC (assignRegionToPerson):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+
+    emit regionAssigned(regionId, personId);
+}
+
+void DatabaseWorker::setPersonReference(int personId, int regionId)
+{
+    QSqlQuery query(db);
+    if (!query.prepare(R"(
+        UPDATE photobase.people
+        SET reference_chip = src.face_chip,
+            reference_descriptor = src.descriptor,
+            reference_descriptor_model = src.descriptor_model,
+            reference_source_region_id = src.id
+        FROM photobase.photo_regions src
+        WHERE photobase.people.id = :person_id
+          AND src.id = :region_id
+    )")) {
+        qDebug() << "Ошибка PREPARE (setPersonReference):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+    query.bindValue(":person_id", personId);
+    query.bindValue(":region_id", regionId);
+
+    if (!query.exec()) {
+        qDebug() << "Ошибка EXEC (setPersonReference):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+
+    emit personReferenceSet(personId, regionId);
+}
+
+void DatabaseWorker::unassignRegion(int regionId)
+{
+    QSqlQuery query(db);
+    query.prepare(R"(
+        UPDATE photobase.photo_regions
+        SET person_id = NULL
+        WHERE id = :region_id
+    )");
+    query.bindValue(":region_id", regionId);
+
+    if (!query.exec()) {
+        qDebug() << "Ошибка EXEC (unassignRegion):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+
+    emit regionUnassigned(regionId);
+}
+QImage DatabaseWorker::loadChipImage(const QString &id, QSize *size, const QSize & /*requestedSize*/)
+{
+    // id приходит без "image://facechip/" — например "region/42" или "person/7"
+    const QStringList parts = id.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    if (parts.size() != 2) {
+        qDebug() << "FaceChipImageProvider: неожиданный id" << id;
+        return QImage();
+    }
+
+    const QString kind = parts.at(0);
+    bool ok = false;
+    const int recordId = parts.at(1).toInt(&ok);
+    if (!ok) {
+        qDebug() << "FaceChipImageProvider: не число в id" << id;
+        return QImage();
+    }
+
+    QString sql;
+    if (kind == QLatin1String("region"))
+        sql = QStringLiteral("SELECT face_chip FROM photobase.photo_regions WHERE id = :id");
+    else if (kind == QLatin1String("person"))
+        sql = QStringLiteral("SELECT reference_chip FROM photobase.people WHERE id = :id");
+    else {
+        qDebug() << "FaceChipImageProvider: неизвестный тип" << kind;
+        return QImage();
+    }
+
+    QSqlQuery query(db);
+    query.prepare(sql);
+    query.bindValue(":id", recordId);
+
+    if (!query.exec() || !query.next()) {
+        qDebug() << "FaceChipImageProvider: не найдено" << id << query.lastError().text();
+        return QImage();
+    }
+
+    const QByteArray jpegBytes = query.value(0).toByteArray();
+    if (jpegBytes.isEmpty())
+        return QImage(); // чип ещё не посчитан/не выбран — нормальный случай, не ошибка
+
+    QImage image = QImage::fromData(jpegBytes, "JPG");
+    if (size) *size = image.size();
+    return image;
+}
+
+void DatabaseWorker::searchPhotos(const PhotoFilter &filter)
+{
+    QStringList mediaPlaceholders;
+    for (int i = 0; i < filter.media.size(); ++i)
+        mediaPlaceholders << QStringLiteral(":media%1").arg(i);
+ 
+    QStringList personPlaceholders;
+    for (int i = 0; i < filter.personIds.size(); ++i)
+        personPlaceholders << QStringLiteral(":person%1").arg(i);
+ 
+    const bool needsScores = filter.facesEnabled && !filter.personIds.isEmpty();
+ 
+    // photo_scores(photo_id, match_count) — считается в зависимости от режима
+    QString scoresCte;
+    if (needsScores) {
+        if (filter.facesUseDescriptor) {
+            // берём reference_descriptor, ищем минимальную дистанцию среди ВСЕХ регионовнаходим ещё не сопоставленные.
+            scoresCte = QStringLiteral(R"(
+                WITH selected_people AS (SELECT id, reference_descriptor FROM photobase.people WHERE id IN (%1) AND reference_descriptor IS NOT NULL),
+                matches AS (
+                    SELECT pr.photo_id, sp.id AS person_id,MIN(pr.descriptor::photobase.vector <-> sp.reference_descriptor::photobase.vector) AS best_distance FROM photobase.photo_regions pr
+                    CROSS JOIN selected_people sp WHERE pr.descriptor IS NOT NULL GROUP BY pr.photo_id, sp.id),
+                photo_scores AS (SELECT photo_id, COUNT(*) AS match_count FROM matches WHERE best_distance < :threshold GROUP BY photo_id)
+            )").arg(personPlaceholders.join(QLatin1Char(',')));
+        } else {
+            scoresCte = QStringLiteral(R"( WITH photo_scores AS (
+                SELECT photo_id, COUNT(DISTINCT person_id) AS match_count FROM photobase.photo_regions WHERE person_id IN (%1) GROUP BY photo_id)
+            )").arg(personPlaceholders.join(QLatin1Char(',')));
+        }
+    }
+ 
+    QString sql = scoresCte + QStringLiteral(R"(
+        SELECT pi.id, pi.file, pi.path, pi.media_name, pi.date_creation, pi.date_available, %1 AS match_count FROM photobase.photo_images pi %2 WHERE pi.missing_since IS NULL
+    )").arg(needsScores ? QStringLiteral("ps.match_count") : QStringLiteral("0"),needsScores ? QStringLiteral("JOIN photo_scores ps ON ps.photo_id = pi.id") : QString());
+ 
+    if (filter.mediaEnabled && !filter.media.isEmpty())
+        sql += QStringLiteral(" AND pi.media_name IN (%1)").arg(mediaPlaceholders.join(QLatin1Char(',')));
+    sql+=(" AND (pi.ext='jpg' OR pi.ext='jpeg') " );    
+    if (filter.dateEnabled)
+        sql += QStringLiteral(" AND COALESCE(pi.date_creation, pi.date_available) BETWEEN :date_from AND :date_to");
+     sql += (filter.sortBy == PhotoFilter::SortBy::FaceMatchCount)
+        ? QStringLiteral(" ORDER BY match_count DESC, COALESCE(pi.date_creation, pi.date_available) DESC")
+        : QStringLiteral(" ORDER BY COALESCE(pi.date_creation, pi.date_available) DESC");
+     if (filter.limitEnabled) sql += QStringLiteral(" LIMIT :max_count");
+     QSqlQuery query(db);
+    if (!query.prepare(sql)) {
+        qDebug() << "Ошибка PREPARE (searchPhotos):" << query.lastError().text();
+        qDebug() << "SQL:" << sql;
+        emit error(query.lastError().text());
+        return;
+    }
+ 
+    if (needsScores) {
+        for (int i = 0; i < filter.personIds.size(); ++i)
+            query.bindValue(personPlaceholders.at(i), filter.personIds.at(i));
+        if (filter.facesUseDescriptor)
+            query.bindValue(":threshold", filter.similarityThreshold);
+    }
+ 
+    if (filter.mediaEnabled)
+        for (int i = 0; i < filter.media.size(); ++i)
+            query.bindValue(mediaPlaceholders.at(i), filter.media.at(i));
+ 
+    if (filter.dateEnabled) {
+        query.bindValue(":date_from", filter.dateFrom);
+        query.bindValue(":date_to", filter.dateTo);
+    }
+ 
+    if (filter.limitEnabled)
+        query.bindValue(":max_count", filter.maxCount);
+ 
+    if (!query.exec()) {
+        qDebug() << "Ошибка EXEC (searchPhotos):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+ 
+    QList<PhotoRecord> result;
+    while (query.next()) {
+        PhotoRecord photo;
+        photo.id = query.value(0).toInt();
+        photo.file = query.value(1).toString();
+        photo.path = query.value(2).toString();
+        photo.mediaName = query.value(3).toString();
+        photo.matchCount = query.value(6).toInt(); 
+        result.append(photo);
+    }
+ 
+    emit photosFound(result);
 }

@@ -3,10 +3,13 @@
 #include <QObject>
 #include <QSqlDatabase>
 #include <QHash>
+#include <QImage>
 
 #include "PhotoRecord.h"
 #include "FileKey.h"
 #include "PhotoRepository.h"
+#include "PhotoRegion.h"
+#include "PhotoFilter.h"
 
 class DatabaseWorker : public PhotoRepository
 {
@@ -22,11 +25,15 @@ public:
     bool updateExif(const PhotoRecord &photo);
     bool updateMD5(const PhotoRecord &photo);
     bool insertThumbnail(const PhotoRecord &photo);
+    bool insertRegions(int photoId, const QList<PhotoRegion> &regions);
     void loadCache(const QString &media,const QString &path,FileCache* m_cache);
     void markMissing(int id);
     void clearMissing(int id);
     QList<PhotoRecord> loadPathEntries(const QString &media, const QString &relativePath);
     QSet<int> loadMissingIds(const QString &media, const QString &relativePath);
+    bool setReferenceFace(int personId, int regionId);
+    QVector<QPair<int, double>> findSimilarFaces(int regionId, double threshold, int limit);
+
 
 public slots:
     void open(SettingsManager *rpSettings) override;
@@ -37,6 +44,16 @@ public slots:
     void close();
     void loadMediaMounts();                                            
     void saveMountPoint(const QString &media, const QString &mountPoint);  
+    
+    void loadPersons();
+    void loadUnresolvedRegions();
+    void loadRegionsForPerson(int personId);
+    void createPerson(const QString &displayName);
+    void assignRegionToPerson(int regionId, int personId);
+    void setPersonReference(int personId, int regionId);
+    void unassignRegion(int regionId);
+    QImage loadChipImage(const QString &id, QSize *size, const QSize & /*requestedSize*/);
+    void searchPhotos(const PhotoFilter &filter);
 
 //    bool exists(const FileKey &key);
 //    void beginTransaction();

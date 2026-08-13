@@ -6,27 +6,66 @@ on:
   pull_request:
 
 jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+      version: ${{ steps.diff.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare VERSION in CMakeLists.txt
+        id: diff
+        run: |
+          NEW=$(grep -oP 'project\(PhotoDB VERSION \K[0-9.]+' client/CMakeLists.txt)
+          OLD=$(git show "${{ github.event.before }}:client/CMakeLists.txt" 2>/dev/null \
+                | grep -oP 'project\(PhotoDB VERSION \K[0-9.]+' || true)
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+          if [ -n "$OLD" ] && [ "$NEW" != "$OLD" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version $OLD -> $NEW"
   windows:
     runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+        
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v5
-
          
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.0'
+          version: '6.10.0'
           cache: true
 
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+            vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+            vcpkgJsonGlob: 'client/vcpkg.json'
+            runVcpkgInstall: true
       - name: Configure
         working-directory: client
         run: cmake --preset windows-msvc
 
+      - name: Create secret.h
+        shell: pwsh
+        working-directory: client
+        run: |
+          Copy-Item secrets.h.example secrets.h
       - name: Build
         working-directory: client
         run: cmake --build --preset windows-msvc-release
@@ -35,8 +74,195 @@ jobs:
         working-directory: client
         run: cmake --install build/windows-msvc --config Release
 
+      - name: Trim unused Qt SQL drivers
+        shell: pwsh
+        run: |
+          Get-ChildItem "$env:QT_ROOT_DIR\plugins\sqldrivers" -Filter *.dll |
+            Where-Object { $_.Name -ne 'qsqlpsql.dll' } |
+            Remove-Item -Force
+
+      - name: Deploy Qt
+        working-directory: client
+        shell: pwsh
+        run: |
+          windeployqt `
+            --release `
+            --no-translations `
+            --qmldir . `
+            install/windows-msvc/bin/PhotoDB.exe
+
+      - name: Package
+        working-directory: client
+        run: |
+          cpack --config build/windows-msvc/CPackConfig.cmake -C Release --package-directory build/windows-msvc
+          
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: PhotoDB-windows
-          path: install/client/windows-msvc/**
+          path: client/*.zip
+
+  linux:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.10.0'
+          cache: true
+
+      - name: Install PostgreSQL client lib
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev fuse libfuse2 autoconf autoconf-archive automake libtool
+      
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+          vcpkgJsonGlob: 'client/vcpkg.json'
+          runVcpkgInstall: true
+
+      - name: Configure
+        working-directory: client
+        run: cmake --preset linux-release
+
+      - name: Create secret.h
+        working-directory: client
+        run: cp secrets.h.example secrets.h
+
+      - name: Build
+        working-directory: client
+        run: cmake --build --preset linux-release
+
+      - name: Install
+        working-directory: client
+        run: cmake --install build/linux-release
+
+      - name: Trim unused Qt SQL drivers
+        run: |
+          find "$QT_ROOT_DIR/plugins/sqldrivers" -type f ! -name 'libqsqlpsql.so' -delete
+
+      - name: Deploy Qt + libpq into AppImage
+        working-directory: client
+        env:
+          QML_SOURCES_PATHS: ${{ github.workspace }}/client
+        run: |
+          wget -c https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -c https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --executable install/linux-release/bin/PhotoDB \
+            --desktop-file packaging/PhotoDB.desktop \
+            --icon-file packaging/PhotoDB.png \
+            --plugin qt \
+            --output appimage
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoDB-linux
+          path: client/*.AppImage
+
+  android:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Android SDK platform-tools and NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK 27.2.12479018
+        run: sdkmanager --install "ndk;27.2.12479018"
+
+      - name: Install Qt (host, desktop)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.10.0'
+          target: 'desktop'
+          dir: '${{ github.workspace }}/qt-host'
+          cache: true
+
+      - name: Save host Qt path
+        run: echo "QT_HOST_PATH=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+
+      - name: Install Qt (Android target)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.10.0'
+          target: 'android'
+          arch: 'android_arm64_v8a'
+          dir: '${{ github.workspace }}/qt-android'
+          cache: true
+
+      - name: Set ANDROID_NDK_ROOT
+        run: echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Configure
+        working-directory: client
+        run: cmake --preset android
+
+      - name: Create secret.h
+        working-directory: client
+        run: cp secrets.h.example secrets.h
+
+      - name: Build APK
+        working-directory: client
+        run: cmake --build --preset android-apk
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoDB-android
+          path: client/build/android/android-build/build/outputs/apk/debug/*.apk
+
+  release:
+    needs: [ check-version, windows, linux, android ]
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: PhotoDB-windows
+          path: dist
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: PhotoDB-linux
+          path: dist
+
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: PhotoDB-android
+          path: dist
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.check-version.outputs.version }}
+          name: v${{ needs.check-version.outputs.version }}
+          files: dist/*
+          generate_release_notes: true

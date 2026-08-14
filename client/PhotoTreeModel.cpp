@@ -177,13 +177,8 @@ void PhotoTreeModel::addPhotos(const QString &media, const QString &path, const 
     PhotoTreeItem *folderItem = findChild(media,path,fname);
     if (!folderItem) return;
     if (folderItem->photosLoaded) return;
-    
-    if ((folderItem->children.size()> 0) && (folderItem->children.first()->type == PhotoTreeItem::Dummy)){
-        beginRemoveRows(indexFromItem(folderItem), 0, 0);
-        childIndex.remove(PhotoTreeItem::GetKey(media,path,folderItem->children.first()->name));
-        delete folderItem->children.takeFirst();
-        endRemoveRows();
-    }
+    folderItem->photosLoaded = true;
+    if (photos.size()==1&&photos.first().id==-1) return;
     int first = folderItem->children.size();
     int last  = first + photos.size() - 1;
     beginInsertRows(indexFromItem(folderItem), first, last);
@@ -193,9 +188,23 @@ void PhotoTreeModel::addPhotos(const QString &media, const QString &path, const 
             item->photo = photo;
         }
     }
-    folderItem->photosLoaded = true;
     endInsertRows();
 }
+void PhotoTreeModel::clearDummy(const QString &media,const QString &path){
+    QStringList parts = path.split('/', Qt::SkipEmptyParts);
+    QString fname=parts.last();
+    PhotoTreeItem *folderItem = findChild(media,path,fname);
+    if (!folderItem) return;
+    if (folderItem->photosLoaded) return;
+    if ((folderItem->children.size()> 0) && (folderItem->children.first()->type == PhotoTreeItem::Dummy)){
+        beginRemoveRows(indexFromItem(folderItem), 0, 0);
+        childIndex.remove(PhotoTreeItem::GetKey(media,path,folderItem->children.first()->name));
+        delete folderItem->children.takeFirst();
+        endRemoveRows();
+    }
+
+}
+
 
 PhotoTreeItem *PhotoTreeModel::itemForPhoto(const QString &media, const QString &path, const QString &name) const
 {

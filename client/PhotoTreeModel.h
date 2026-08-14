@@ -103,6 +103,7 @@ public:
     void addMedia(const QStringList &media);
     void addFolders(const QString &media,const QStringList &folders);
     void addPhotos(const QString &media,const QString &path,const QList<PhotoRecord> &photos);
+    void clearDummy(const QString &media,const QString &path);
     Q_INVOKABLE void expand(const QModelIndex &index);
     PhotoTreeItem *itemForPhoto(const QString &media,const QString &path,const QString &name) const;
 signals:

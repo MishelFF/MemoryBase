@@ -122,6 +122,13 @@ void DatabaseWorker::loadPhotos(const QString &mediaName,const QString &path)
                 .toDateTime();
             photos.append(photo);
         }
+        if (!photos.size()){
+            PhotoRecord photo;
+            photo.id =-1;
+            photo.path=path;
+            photo.mediaName=mediaName;
+            photos.append(photo);
+        }
         emit photosLoaded(photos);
     }
     else

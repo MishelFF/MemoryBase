@@ -34,7 +34,7 @@ public slots:
     virtual void setPersonReference(int personId, int regionId) = 0;
     virtual void unassignRegion(int regionId) = 0;
     virtual QImage loadChipImage(const QString &id, QSize *size, const QSize & /*requestedSize*/)= 0;
-    virtual void searchPhotos(const PhotoFilter &) { emit error(QStringLiteral("Поиск недоступен")); }
+    virtual void searchPhotos(const PhotoFilter &) =0;
 
 
 signals:

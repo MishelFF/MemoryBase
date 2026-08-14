@@ -36,7 +36,6 @@ int main(int argc,char *argv[])
     qRegisterMetaType<PhotoRecord>("PhotoRecord");
     PhotoRepository *repository;
     bool useDBServer = CONNECTDATABASE;
-
 #ifdef Q_OS_ANDROID
 
         repository= new ApiWorker;

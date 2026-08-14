@@ -162,13 +162,14 @@ void ScannerController::loadPhotos(const QString &media,const QString &path)
 //    QString key = media + path;
 //    if(m_loadedFolders.contains(key)) return;
 //    m_loadedFolders.insert(key);
-    QMetaObject::invokeMethod(m_repository, [this, media, path](){
-    m_repository->loadPhotos(media, path);
-    }, Qt::QueuedConnection);    
+    QMetaObject::invokeMethod(m_repository, [this, media, path](){m_repository->loadPhotos(media, path);}, Qt::QueuedConnection);    
 }
 void ScannerController::photosLoaded(QList<PhotoRecord> photos)
 {
     if(photos.isEmpty()) return;
+    QString media=photos.first().mediaName;
+    QString path=photos.first().path;
+    m_photoTree->clearDummy(media,path);
     m_photoTree->addPhotos(photos.first().mediaName,photos.first().path,photos);
     emit photoInFolderLoaded();
 }
@@ -496,7 +497,7 @@ PhotoTreeItem * ScannerController::findNeighborLevelDown(PhotoTreeItem *item,int
         QMetaObject::Connection dataConn = connect(this, &ScannerController::photoInFolderLoaded, 
             [&loop, &timeoutTimer, &success]() {success = true;timeoutTimer.stop();loop.quit();});
         QMetaObject::Connection timeoutConn = connect(&timeoutTimer, &QTimer::timeout,[&loop]() {loop.quit();});
-        timeoutTimer.start(2000);
+        timeoutTimer.start(5000);
         loadPhotos(item->mediaName,  item->path.startsWith("/") ? item->path : ("/" + item->path));
         loop.exec();
         disconnect(dataConn);

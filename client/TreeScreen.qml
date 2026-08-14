@@ -10,7 +10,7 @@ import QtQuick.Layouts
 
 Item {
     id: root
-
+    signal photoSelected(int id)
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -31,7 +31,6 @@ Item {
                 id: root_tree
                 clip: true
 
-                signal photoSelected(int id)
 
                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                 ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
@@ -54,7 +53,7 @@ Item {
                         var id = root_tree.model.photoId(idx)
                         if (id > 0) {
                             scannerController.selectPhoto(id)
-                            root_tree.photoSelected(id)
+                            root.photoSelected(id) 
                         }
                     }
                 }
@@ -114,8 +113,13 @@ Item {
                     keyNavigationWraps: false
                     highlightMoveDuration: 80
 
-                    Keys.onReturnPressed: if (currentIndex >= 0) resultsList.activate(currentIndex)
-                    Keys.onEnterPressed: if (currentIndex >= 0) resultsList.activate(currentIndex)
+                    Keys.onReturnPressed: if (currentIndex >= 0) activateCurrent()
+                    Keys.onEnterPressed: if (currentIndex >= 0) activateCurrent()
+                    function activateCurrent() {
+                        scannerController.selectSearchResult(currentIndex)
+                        var id = scannerController.searchResultsModel.idAt(currentIndex)
+                        if (id > 0) root.photoSelected(id)
+                    }
                     onCurrentIndexChanged: {
                         if (currentIndex >= 0) scannerController.selectSearchResult(currentIndex)
                     }
@@ -129,7 +133,10 @@ Item {
 
                     delegate: ItemDelegate {
                         width: ListView.view.width
-                        onClicked: resultsList.currentIndex = index
+                        onClicked: {
+                            resultsList.currentIndex = index
+                            resultsList.activateCurrent()   
+                        }
                          contentItem: RowLayout {
                             ColumnLayout {
                                 spacing: 2

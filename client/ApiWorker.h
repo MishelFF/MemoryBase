@@ -31,6 +31,7 @@ public slots:
     void setPersonReference(int personId, int regionId) override;
     void unassignRegion(int regionId) override;
     QImage loadChipImage(const QString &id, QSize *size, const QSize & /*requestedSize*/) override;
+    void searchPhotos(const PhotoFilter &filter);
 
 private:
 

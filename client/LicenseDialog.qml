@@ -2,9 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// Диалог активации лицензии. Открывается из пункта меню/Drawer'а
-// (см. PlatformLayout.qml / +android/PlatformLayout.qml) — тем же
-// способом, что и SettingsDialog.
+
 Dialog {
     id: root
     title: "Активация лицензии"

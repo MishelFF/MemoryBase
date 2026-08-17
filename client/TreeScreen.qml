@@ -10,6 +10,9 @@ import QtQuick.Layouts
 
 Item {
     id: root
+    function selectedFolderIndex() {
+        return root_tree.selectionModel.currentIndex
+    }
     signal photoSelected(int id)
     ColumnLayout {
         anchors.fill: parent
@@ -50,6 +53,7 @@ Item {
                     onClicked: {
                         var idx = root_tree.index(row, column)
                         root_tree.selectionModel.setCurrentIndex(idx, ItemSelectionModel.ClearAndSelect | ItemSelectionModel.Rows)
+                        scannerController.setSelectedTreeNode(idx) 
                         var id = root_tree.model.photoId(idx)
                         if (id > 0) {
                             scannerController.selectPhoto(id)
@@ -129,8 +133,13 @@ Item {
                             if (resultsList.currentIndex !== scannerController.searchListCurrentIndex)
                                 resultsList.currentIndex = scannerController.searchListCurrentIndex
                         }
+                   }
+                    Connections {
+                        target: root_tree.selectionModel
+                        function onCurrentChanged(current, previous) {
+                            scannerController.setSelectedTreeNode(current)
+                        }
                     }
-
                     delegate: ItemDelegate {
                         width: ListView.view.width
                         onClicked: {
@@ -173,4 +182,5 @@ Item {
             }
         }
     }
+
 }

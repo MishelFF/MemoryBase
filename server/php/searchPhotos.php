@@ -19,6 +19,12 @@ $dateEnabled    = !empty($input["dateEnabled"]);
 $dateFrom       = $input["dateFrom"] ?? null;
 $dateTo         = $input["dateTo"] ?? null;
 
+$countryEnabled = !empty($input["countryEnabled"]);
+$countryId      = isset($input["countryId"]) ? (int)$input["countryId"] : -1;
+
+$placeEnabled   = !empty($input["placeEnabled"]);
+$placeId        = isset($input["placeId"]) ? (int)$input["placeId"] : -1;
+
 $limitEnabled   = !empty($input["limitEnabled"]);
 $maxCount       = isset($input["maxCount"]) ? (int)$input["maxCount"] : 0;
 
@@ -89,6 +95,21 @@ if ($dateEnabled) {
     $sql .= " AND COALESCE(pi.date_creation, pi.date_available) BETWEEN :date_from AND :date_to";
 }
 
+if ($countryEnabled && $countryId >= 0) {
+    $sql .= " AND pi.country_id = :country_id";
+}
+if ($placeEnabled && $placeId >= 0) {
+    $sql .= "
+        AND EXISTS (
+            SELECT 1 FROM photobase.places pl
+            WHERE pl.id = :place_id
+              AND (pi.latitude != 0 OR pi.longitude != 0)
+              AND POWER((pi.latitude - pl.latitude) * 111.32, 2)
+                + POWER((pi.longitude - pl.longitude) * 111.32 * cos(radians(pl.latitude)), 2)
+                <= POWER(pl.radius_km, 2)
+        )
+    ";
+}
 $sql .= ($sortBy === "face_match_count")
     ? " ORDER BY match_count DESC, COALESCE(pi.date_creation, pi.date_available) DESC"
     : " ORDER BY COALESCE(pi.date_creation, pi.date_available) DESC";
@@ -118,6 +139,14 @@ try {
     if ($dateEnabled) {
         $stmt->bindValue(":date_from", $dateFrom);
         $stmt->bindValue(":date_to", $dateTo);
+    }
+
+    if ($countryEnabled && $countryId >= 0) {
+        $stmt->bindValue(":country_id", $countryId, PDO::PARAM_INT);
+    }
+
+    if ($placeEnabled && $placeId >= 0) {
+        $stmt->bindValue(":place_id", $placeId, PDO::PARAM_INT);
     }
 
     if ($limitEnabled) {

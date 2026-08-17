@@ -17,7 +17,9 @@
 #endif
 #include "PhotoRegion.h"
 #include "PhotoFilter.h"
-
+#include "GeoLookupService.h" 
+#include "PlaceRecord.h" 
+#include "CountryRecord.h" 
 
 class PhotoRepository;
 class PhotoTreeModel;
@@ -25,12 +27,9 @@ class PersonsModel;
 class FaceRegionsModel;
 class PhotoSearchResultsModel;
 
-
 class ScannerController : public QObject
 {
     Q_OBJECT
-
-
 public:
     Q_PROPERTY(PhotoTreeModel* photoTree  READ photoTree  CONSTANT)
     Q_PROPERTY(PersonsModel* personsModel READ personsModel CONSTANT)
@@ -53,7 +52,13 @@ public:
     Q_PROPERTY(QString missingFilesText READ missingFilesText NOTIFY missingFilesTextChanged)
     Q_PROPERTY(QStringList knownMedia READ knownMedia NOTIFY knownMediaChanged)
     Q_PROPERTY(QStringList knownMountPoints READ knownMountPoints NOTIFY knownMountPointsChanged)
-
+    
+    Q_PROPERTY(QString suggestedPlaceName   READ suggestedPlaceName   NOTIFY placeSuggestionReady)
+    Q_PROPERTY(int     suggestedCountryId   READ suggestedCountryId   NOTIFY placeSuggestionReady)
+    Q_PROPERTY(QVariantList countryList     READ countryList          NOTIFY countriesChanged)
+    Q_PROPERTY(QVariantList placeList       READ placeList            NOTIFY placesChanged)
+    Q_PROPERTY(int selectedPhotoCountryId READ selectedPhotoCountryId NOTIFY selectedPhotoChanged)
+    
     bool hasNextPhoto() const { return m_nextPhotoId >= 0; }
     bool hasPreviousPhoto() const { return m_previousPhotoId >= 0; }
     
@@ -63,6 +68,13 @@ public:
     Q_INVOKABLE void assignRegionToPerson(int regionId, int personId);
     Q_INVOKABLE void setPersonReference(int personId, int regionId);
     Q_INVOKABLE void unassignRegion(int regionId);
+
+    Q_INVOKABLE void addPlace(const QString &name, double radiusKm, int countryId);
+    Q_INVOKABLE void addCountry(const QString &name); 
+    Q_INVOKABLE void addCountryWithBBoxes(const QString &name, const QVariantList &bboxes);
+    Q_INVOKABLE void setPhotoCountry(int countryId);
+    Q_INVOKABLE void assignCountryToFolder(int countryId);    
+    Q_INVOKABLE void setSelectedTreeNode(const QModelIndex &index);
 
     int importTotal() const { return m_totalFiles; }
     int importProcessed() const { return m_processedFiles.loadRelaxed(); }
@@ -81,7 +93,8 @@ public:
     FaceRegionsModel* personRegionsModel() const { return m_personRegionsModel; }
     PhotoSearchResultsModel* searchResultsModel() const { return m_searchResultsModel; }
     int searchListCurrentIndex() const { return m_searchListIndex;}
-
+    int selectedPhotoCountryId() const { return m_selectedPhoto.countryId;}
+    
     QString thumbnailDataSource() const;
     QVariantList photoInfo() const;
     QString selectedPhotoKey() const {
@@ -93,6 +106,11 @@ public:
     QStringList knownMedia() const { return m_knownMedia; }
     QStringList knownMountPoints() const { return m_knownMountPoints; }
     QImage loadChipImage(const QString &id, QSize *size, const QSize & /*requestedSize*/);
+    
+    QString suggestedPlaceName() const { return m_suggestedPlaceName; }
+    int suggestedCountryId() const { return m_suggestedCountryId; }
+    QVariantList countryList() const;
+    QVariantList placeList() const;
 
 public slots:
     void loadTree();
@@ -113,6 +131,9 @@ public slots:
     void loadUnresolvedRegions();
     void searchPhotos(const QVariantMap &filterMap);
     void selectSearchResult(int index);
+    void onPlaceLookupError(int photoId, QString message);     
+    void loadCountries();
+    void loadPlaces();          
 
 signals:
     void selectedPhotoChanged();
@@ -128,6 +149,10 @@ signals:
     void missingFilesTextChanged();
     void knownMountPointsChanged();
 
+    void placeSuggestionReady();
+    void countriesChanged();
+    void placesChanged();
+    void countriesAssignedToFolder(int updatedCount);
 private slots:
     void databaseConnected(bool ok);
     void mediaLoaded(QStringList media);
@@ -137,6 +162,10 @@ private slots:
     void photoTreeLoaded(const QList<PhotoRecord> &photos);
     void reConnected();
     void mediaMountsLoaded(QVariantList mounts);
+
+    void onCountriesLoaded(QList<CountryRecord> countries);
+    void onPlacesLoaded(QList<PlaceRecord> places);
+    void onPlaceReady(int photoId, QString placeName, QString mapUrl, QString countryName); // сигнатура изменилась
 
 //    void selectPhotoLoaded(const PhotoRecord &photo);
 //    void treeItemExpanded(int type,QString media,QString path);
@@ -157,10 +186,14 @@ private:
     FaceRegionsModel *m_personRegionsModel = nullptr;
     PhotoSearchResultsModel *m_searchResultsModel = nullptr;
     SettingsManager *m_settings = nullptr;
+    GeoLookupService *m_geoService = nullptr;  
 #ifdef NEED_LICENSE
     LicenseManager *m_licenseManager=nullptr; 
 #endif
     PhotoRecord m_selectedPhoto;
+    QString m_selectedFolderMedia;
+    QString m_selectedFolderPath;
+    bool m_selectedFolderValid = false;
     QString m_thumbnailSource;
     QThreadPool m_pool;
     FileCache m_cache;
@@ -186,4 +219,9 @@ private:
     QString m_previousPhotoFolder;
     QList<QByteArray> supportedFormats;
     QStringList m_knownMountPoints;
+    QString m_placeInfo;
+    QString m_suggestedPlaceName;
+    int m_suggestedCountryId = -1;
+    QList<CountryRecord> m_countries;
+    QList<PlaceRecord> m_places;
 };

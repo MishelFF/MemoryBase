@@ -164,3 +164,47 @@ CREATE INDEX idx_photo_regions_photo_id ON photobase.photo_regions(photo_id);
 
 -- CREATE INDEX idx_photo_regions_descriptor ON photobase.photo_regions
 --     USING ivfflat (descriptor vector_cosine_ops) WITH (lists = 100);
+
+CREATE TABLE IF NOT EXISTS countries (
+    id   INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS country_bboxes (
+    id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    country_id INTEGER NOT NULL REFERENCES countries(id) ON DELETE CASCADE,
+    lat_min    DOUBLE PRECISION NOT NULL,
+    lat_max    DOUBLE PRECISION NOT NULL,
+    lon_min    DOUBLE PRECISION NOT NULL,
+    lon_max    DOUBLE PRECISION NOT NULL,
+
+    CHECK (lat_min <= lat_max),
+    CHECK (lon_min <= lon_max)
+);
+
+CREATE INDEX IF NOT EXISTS idx_country_bboxes_country
+    ON country_bboxes(country_id);
+CREATE INDEX IF NOT EXISTS idx_country_bboxes_range
+    ON country_bboxes(lat_min, lat_max, lon_min, lon_max);
+
+CREATE TABLE IF NOT EXISTS places (
+    id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name       TEXT NOT NULL,
+    latitude   DOUBLE PRECISION NOT NULL,
+    longitude  DOUBLE PRECISION NOT NULL,
+    radius_km  DOUBLE PRECISION NOT NULL DEFAULT 5.0,
+    country_id INTEGER REFERENCES countries(id) ON DELETE SET NULL,
+    created    TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CHECK (radius_km > 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_places_country
+    ON places(country_id);
+CREATE INDEX IF NOT EXISTS idx_places_name
+    ON places(name);
+
+ALTER TABLE photo_images
+    ADD COLUMN IF NOT EXISTS country_id INTEGER REFERENCES countries(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_photo_images_country ON photo_images(country_id);

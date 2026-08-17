@@ -106,6 +106,7 @@ public:
     void clearDummy(const QString &media,const QString &path);
     Q_INVOKABLE void expand(const QModelIndex &index);
     PhotoTreeItem *itemForPhoto(const QString &media,const QString &path,const QString &name) const;
+    PhotoTreeItem *itemAt(const QModelIndex &index) const { return itemFromIndex(index); }
 signals:
     void requestFolders(QString media);
     void requestPhotos(QString media,QString path);

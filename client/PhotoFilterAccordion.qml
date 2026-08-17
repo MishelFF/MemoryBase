@@ -31,16 +31,21 @@ Item {
 
     property string sortBy: "date" // "date" | "matchCount"
 
+    property bool countryEnabled: false
+    property int selectedCountryId: -1
+    property bool placeEnabled: false
+    property int selectedPlaceId: -1
     // Краткое текстовое резюме для свёрнутого состояния
     readonly property string summaryText: {
         const parts = []
         if (limitEnabled) parts.push("до " + maxCount)
         if (mediaEnabled) parts.push("Медиа: " + selectedMedia.length)
         if (dateEnabled) parts.push("Даты заданы")
+        if (countryEnabled && selectedCountryId >= 0) parts.push("Страна")
+        if (placeEnabled && selectedPlaceId >= 0) parts.push("Место")
         if (facesEnabled) parts.push("Лица: " + selectedPersonIds.length)
         return parts.length > 0 ? parts.join(" · ") : "Фильтр не задан"
     }
-
     ColumnLayout {
         width: parent.width
         spacing: 0
@@ -138,7 +143,48 @@ Item {
                     onDateToChanged: root.dateTo = dateTo
                 }
             }
+            RowLayout {
+                Layout.fillWidth: true
+                CheckBox {
+                    checked: root.placeEnabled
+                    onCheckedChanged: root.placeEnabled = checked
+                }
+                Label { text: "Место:" }
+                ComboBox {
+                    Layout.fillWidth: true
+                    enabled: root.placeEnabled
+                    opacity: root.placeEnabled ? 1.0 : 0.5
+                    textRole: "text"
+                    valueRole: "id"
+                    model: [{ id: -1, text: "Любое" }].concat(
+                        scannerController.placeList.map(p => ({ id: p.id, text: p.name }))
+                    )
+                    Component.onCompleted: currentIndex = 0
+                    onActivated: root.selectedPlaceId = currentValue
+                }
+                CheckBox {
+                    checked: root.countryEnabled
+                    onCheckedChanged: root.countryEnabled = checked
+                }
+                Label { text: "Страна:" }
+                ComboBox {
+                    Layout.fillWidth: true
+                    enabled: root.countryEnabled
+                    opacity: root.countryEnabled ? 1.0 : 0.5
+                    textRole: "text"
+                    valueRole: "id"
+                    model: [{ id: -1, text: "Любая" }].concat(
+                        scannerController.countryList.map(c => ({ id: c.id, text: c.name }))
+                    )
+                    Component.onCompleted: currentIndex = 0
+                    onActivated: root.selectedCountryId = currentValue
+                }
+            }
 
+            // --- Место ---
+//            RowLayout {
+//                Layout.fillWidth: true
+//            }
             // --- Лица ---
             RowLayout {
                 Layout.fillWidth: true
@@ -235,6 +281,10 @@ Item {
                         dateEnabled: root.dateEnabled,
                         dateFrom: root.dateFrom,
                         dateTo: root.dateTo,
+                       countryEnabled: root.countryEnabled,
+                        countryId: root.selectedCountryId,
+                        placeEnabled: root.placeEnabled,
+                        placeId: root.selectedPlaceId,
                         facesEnabled: root.facesEnabled,
                         personIds: root.selectedPersonIds,
                         facesUseDescriptor: root.facesUseDescriptor,

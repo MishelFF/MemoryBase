@@ -102,7 +102,6 @@
             "toolchainFile": "$env{QT_ROOT_DIR}/lib/cmake/Qt6/qt.toolchain.cmake",
             "cacheVariables": {
                 "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}",
-                "CMAKE_BUILD_TYPE": "Debug",
                 "QT_HOST_PATH": "$env{QT_HOST_PATH}",
                 "ANDROID_NDK_ROOT": "$env{ANDROID_NDK_ROOT}",
                 "ANDROID_PLATFORM": "android-24",
@@ -113,10 +112,24 @@
         },
         {
             "name": "android",
-            "displayName": "Android (arm64-v8a, устройство)",
+            "displayName": "Android debug (arm64-v8a)",
             "inherits": "android-base",
             "cacheVariables": {
-                "ANDROID_ABI": "arm64-v8a"
+                "ANDROID_ABI": "arm64-v8a",
+                "CMAKE_BUILD_TYPE": "Debug"            }
+        },
+        {
+            "name": "android-release",
+            "displayName": "Android Release (arm64-v8a)",
+            "inherits": "android-base",
+            "cacheVariables": {
+                "ANDROID_ABI": "arm64-v8a",
+                "CMAKE_BUILD_TYPE": "Release",
+                "QT_ANDROID_SIGN_APK": "ON",
+                "QT_ANDROID_KEYSTORE_PATH": "$env{ANDROID_KEYSTORE_PATH}",
+                "QT_ANDROID_KEYSTORE_ALIAS": "$env{ANDROID_KEYSTORE_ALIAS}",
+                "QT_ANDROID_KEYSTORE_STORE_PASS": "$env{ANDROID_KEYSTORE_STORE_PASSWORD}",
+                "QT_ANDROID_KEYSTORE_KEY_PASS": "$env{ANDROID_KEYSTORE_KEY_PASSWORD}"
             }
         },
         {
@@ -173,6 +186,12 @@
             "name": "android-apk",
             "displayName": "Android Debug APK (устройство, arm64-v8a)",
             "configurePreset": "android",
+            "targets": [ "apk" ]
+        },
+        {
+            "name": "android-apk-release",
+            "displayName": "Android Release APK (arm64-v8a)",
+            "configurePreset": "android-release",
             "targets": [ "apk" ]
         },
         {

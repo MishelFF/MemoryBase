@@ -54,6 +54,18 @@ public slots:
     void unassignRegion(int regionId);
     QImage loadChipImage(const QString &id, QSize *size, const QSize & /*requestedSize*/);
     void searchPhotos(const PhotoFilter &filter);
+    void loadCountries();
+    void addCountry(const QString &name, const QList<CountryBBox> &bboxes);
+    void updateCountryBBoxes(int countryId, const QList<CountryBBox> &bboxes);
+    void deleteCountry(int countryId);
+    void loadPlaces();
+    void addPlace(const QString &name, double lat, double lon,double radiusKm, int countryId);
+    void updatePlace(int placeId, const QString &name, double radiusKm, int countryId);
+    void deletePlace(int placeId);
+    void assignCountriesByCoordinates();
+    void assignCountryToFolder(const QString &mediaName,const QString &folderPathPrefix,int countryId);
+    void updatePhotoCountry(int photoId, int countryId);
+
 
 //    bool exists(const FileKey &key);
 //    void beginTransaction();

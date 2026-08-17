@@ -32,6 +32,20 @@ public slots:
     void unassignRegion(int regionId) override;
     QImage loadChipImage(const QString &id, QSize *size, const QSize & /*requestedSize*/) override;
     void searchPhotos(const PhotoFilter &filter);
+    void updatePhotoCountry(int photoId, int countryId);
+
+    virtual void loadCountries();
+    virtual void addCountry(const QString &name, const QList<CountryBBox> &bboxes);
+    virtual void updateCountryBBoxes(int countryId, const QList<CountryBBox> &bboxes);
+    virtual void deleteCountry(int countryId);
+
+    virtual void loadPlaces();
+    virtual void addPlace(const QString &name, double lat, double lon, double radiusKm, int countryId);
+    virtual void updatePlace(int placeId, const QString &name, double radiusKm, int countryId);
+    virtual void deletePlace(int placeId);
+
+    virtual void assignCountriesByCoordinates();
+    virtual void assignCountryToFolder(const QString &mediaName, const QString &folderPathPrefix, int countryId) ;
 
 private:
 

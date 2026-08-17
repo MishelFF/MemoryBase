@@ -44,5 +44,6 @@ struct PhotoRecord
     int thumbheight = 0;
     QByteArray thumbnail;
     int matchCount = 0;
+    int countryId = -1;
 };
 Q_DECLARE_METATYPE(PhotoRecord)

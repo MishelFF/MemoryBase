@@ -100,6 +100,10 @@ set(SOURCES
     PhotoSearchResultsModel.cpp
     PhotoSearchResultsModel.h
     PhotoFilter.h
+    GeoLookupService.cpp
+    GeoLookupService.h
+    GeoCache.cpp
+    GeoCache.h
 
     settingsmanager.cpp
     settingsmanager.h
@@ -175,6 +179,7 @@ qt_add_qml_module(PhotoDB
         FaceMatchingScreen.qml
         PhotoFilterAccordion.qml
         DateRangeFilter.qml
+        AddCountryDialog.qml
 )
 
 # qtquickcontrols2.conf должен лежать в корне ресурсов (":/qtquickcontrols2.conf"),
@@ -220,6 +225,7 @@ if(NOT ANDROID)
         PhotoFilterAccordion.qml
         FaceMatchingScreen.qml
         DateRangeFilter.qml
+        AddCountryDialog.qml
         DESTINATION ${CMAKE_INSTALL_DATADIR}/PhotoDB/qml)
 
     # QSql PSQL-драйвер (Qt6::Sql) грузит libpq динамически через QLibrary в рантайме,

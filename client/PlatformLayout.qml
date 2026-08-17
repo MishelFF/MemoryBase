@@ -26,6 +26,7 @@ Item {
     function handleBack() {
         return false
     }
+    AddCountryDialog { id: addCountryDialog }
 
     ColumnLayout {
         anchors.fill: parent
@@ -46,7 +47,7 @@ Item {
                 }
                 MenuItem { 
                     text: "Активация лицензии..."
-                    onTriggered: licenseDlg.open()
+                    onTriggered: licenseDialog.open()
                 }
                 MenuSeparator {}
                 MenuItem {
@@ -94,6 +95,17 @@ Item {
                     }
                 }
             }
+            Menu {
+                title: "Места"
+                MenuItem {
+                    text: "Новая страна"
+                    onTriggered: addCountryDialog.open()
+                }
+                MenuItem {
+                    text: "Присвоить страну выделенной папке…"
+                    onTriggered: assignCountryDialog.open()
+                }
+            }
         }
 
         SplitView {
@@ -105,6 +117,7 @@ Item {
             Frame {
                 SplitView.preferredWidth: parent.width * 0.4
                 TreeScreen {
+                    id: treeScreen
                     anchors.fill: parent
                 }
             }
@@ -183,5 +196,38 @@ Item {
 
         licenseDialog.open()
         }
+    }
+    Dialog {
+    id: assignCountryDialog
+    title: "Присвоить страну папке"
+    modal: true
+    anchors.centerIn: Overlay.overlay
+    standardButtons: Dialog.Ok | Dialog.Cancel
+
+    onOpened: assignCountryCombo.currentIndex = -1
+
+    onAccepted: {
+        if (assignCountryCombo.currentIndex < 0) return
+        var countryId = scannerController.countryList[assignCountryCombo.currentIndex].id
+        scannerController.assignCountryToFolder(countryId)
+    }
+
+    ColumnLayout {
+        width: 320
+        spacing: Theme.spacingMd
+
+        Label {
+            text: "Будет проставлено для всех фото в выбранной ветке."
+            wrapMode: Text.Wrap
+            Layout.fillWidth: true
+        }
+
+        ComboBox {
+            id: assignCountryCombo
+            Layout.fillWidth: true
+            model: scannerController.countryList
+            textRole: "name"
+        }
+    }
     }
 }

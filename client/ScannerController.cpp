@@ -31,7 +31,7 @@ QObject(parent), m_repository(repository),m_settings(settings)
     m_unresolvedRegionsModel = new FaceRegionsModel(true,this);
     m_personRegionsModel = new FaceRegionsModel(false,this);
     m_searchResultsModel = new PhotoSearchResultsModel(this);
-
+    m_geoService = new GeoLookupService(this);
 
     qDebug() << "Connecting repository:" << m_repository;
     connect(m_repository,&PhotoRepository::mediaLoaded,this,&ScannerController::mediaLoaded);
@@ -59,6 +59,13 @@ QObject(parent), m_repository(repository),m_settings(settings)
     connect(m_repository, &PhotoRepository::regionUnassigned,m_unresolvedRegionsModel, &FaceRegionsModel::onRegionUnassigned);
     connect(m_repository, &PhotoRepository::regionUnassigned,m_personRegionsModel, &FaceRegionsModel::onRegionUnassigned);
     connect(m_repository, &PhotoRepository::photosFound, this, [this](QList<PhotoRecord> photos) { m_searchResultsModel->setPhotos(photos);});//    connect(this,&ScannerController::requestPhotos,m_photoTree,&PhotoTreeModel::requestPhotos);
+    connect(m_geoService, &GeoLookupService::placeNameReady, this, &ScannerController::onPlaceReady);
+    connect(m_geoService, &GeoLookupService::lookupError,    this, &ScannerController::onPlaceLookupError);
+    connect(m_repository, &PhotoRepository::countriesLoaded, this, &ScannerController::onCountriesLoaded);
+    connect(m_repository, &PhotoRepository::placesLoaded,    this, &ScannerController::onPlacesLoaded);
+    connect(m_repository, &PhotoRepository::countryAdded,    this, [this](CountryRecord) { loadCountries(); });
+    connect(m_repository, &PhotoRepository::placeAdded,      this, [this](PlaceRecord)   { loadPlaces(); });
+    connect(m_repository, &PhotoRepository::countriesAssigned, this, &ScannerController::countriesAssignedToFolder);
     //emit connectrepository(m_settings);
     supportedFormats = QImageReader::supportedImageFormats();
     QTimer::singleShot(0, this, [this](){
@@ -109,6 +116,12 @@ void ScannerController::photoLoaded(PhotoRecord photo)
     else {
         m_thumbnailSource = "data:image/jpeg;base64," + QString::fromLatin1( photo.thumbnail.toBase64());
     }
+    if (photo.latitude != 0 || photo.longitude != 0) {
+        m_placeInfo = "Определяем место…";
+        m_geoService->lookup(photo.id, photo.latitude, photo.longitude);
+    } else {
+        m_placeInfo.clear();
+    }
     emit selectedPhotoChanged();
     updateNavigationNeighbors();
 }
@@ -126,9 +139,7 @@ void ScannerController::mediaLoaded(QStringList media)
     for (const QString &name : media)
     {
 //      m_loadedMedia.insert(name);
-        QMetaObject::invokeMethod(m_repository, [this, name](){
-         m_repository->loadFolders(name);
-        }, Qt::QueuedConnection);       
+        QMetaObject::invokeMethod(m_repository, [this, name](){m_repository->loadFolders(name);}, Qt::QueuedConnection);       
     }
     m_knownMedia = media;
     emit knownMediaChanged();
@@ -148,9 +159,7 @@ void ScannerController::mediaLoaded(QStringList media)
 void ScannerController::loadFolders(const QString &media)
 {
 //    if(!m_loadedMedia.contains(media)) m_loadedMedia.insert(media);
-    QMetaObject::invokeMethod(m_repository, [this, media](){
-    m_repository->loadFolders(media);
-    }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(m_repository, [this, media](){ m_repository->loadFolders(media);}, Qt::QueuedConnection);
 }
 void ScannerController::foldersLoaded(QString media,QStringList folders)
 {
@@ -401,6 +410,7 @@ void ScannerController::databaseConnected(bool ok)
     loadMediaMounts();
     m_personsModel->refresh();
     loadUnresolvedRegions();
+    loadCountries();loadPlaces();
 }
 void ScannerController::photoTreeLoaded(const QList<PhotoRecord> &photos)
 {
@@ -426,7 +436,8 @@ QVariantList ScannerController::photoInfo() const
     addRow("Ширина", m_selectedPhoto.width > 0 ? QString::number(m_selectedPhoto.width) : "");
     addRow("Высота", m_selectedPhoto.height > 0 ? QString::number(m_selectedPhoto.height) : "");
     addRow("MD5", m_selectedPhoto.md5);
-    addRow("GPS", (m_selectedPhoto.latitude != 0 || m_selectedPhoto.longitude != 0)?QString("%1, %2").arg(m_selectedPhoto.latitude, 0, 'f', 6).arg(m_selectedPhoto.longitude, 0, 'f', 6):"");
+    addRow("Место", m_placeInfo);
+//    addRow("GPS", (m_selectedPhoto.latitude != 0 || m_selectedPhoto.longitude != 0)?QString("%1, %2").arg(m_selectedPhoto.latitude, 0, 'f', 6,m_selectedPhoto.longitude, 0, 'f', 6):"");
     return list;
 }
 QString ScannerController::mountPointFor(const QString &media) const
@@ -676,10 +687,138 @@ void ScannerController::searchPhotos(const QVariantMap &filterMap)
     filter.dateEnabled = filterMap.value("dateEnabled").toBool();
     filter.dateFrom = filterMap.value("dateFrom").toDateTime();
     filter.dateTo = filterMap.value("dateTo").toDateTime();
-    filter.facesEnabled = filterMap.value("facesEnabled").toBool();
+    filter.countryEnabled = filterMap.value("countryEnabled").toBool();
+    filter.countryId = filterMap.value("countryId", -1).toInt();
+    filter.placeEnabled = filterMap.value("placeEnabled").toBool();
+    filter.placeId = filterMap.value("placeId", -1).toInt();filter.facesEnabled = filterMap.value("facesEnabled").toBool();
     for (const QVariant &v : filterMap.value("personIds").toList()) filter.personIds.append(v.toInt());
     filter.facesUseDescriptor = filterMap.value("facesUseDescriptor").toBool();
     filter.similarityThreshold = filterMap.value("similarityThreshold", 0.6).toDouble();
     filter.sortBy = (filterMap.value("sortBy").toString() == QLatin1String("matchCount"))? PhotoFilter::SortBy::FaceMatchCount: PhotoFilter::SortBy::Date;
      QMetaObject::invokeMethod(m_repository, [this, filter](){m_repository->searchPhotos(filter);}, Qt::QueuedConnection);
+}
+
+void ScannerController::onPlaceLookupError(int photoId, QString message)
+{
+    if (photoId != m_selectedPhoto.id) return;
+    m_placeInfo = QString(); 
+    emit selectedPhotoChanged();
+    emit status(message);
+}
+
+void ScannerController::onPlaceReady(int photoId, QString placeName, QString mapUrl, QString countryName)
+{
+    if (photoId != m_selectedPhoto.id) return;
+    m_placeInfo = QString("<a href=\"%1\" style=\"color:#4FC3F7; text-decoration:none;\">%2</a>").arg(mapUrl, placeName);
+
+    m_suggestedPlaceName = placeName;
+    m_suggestedCountryId = -1;
+    for (const auto &c : m_countries) {
+        if (c.name.compare(countryName, Qt::CaseInsensitive) == 0) {
+            m_suggestedCountryId = c.id;
+            break;
+        }
+    }
+    emit selectedPhotoChanged();
+    emit placeSuggestionReady();
+}
+void ScannerController::loadCountries()
+{
+    QMetaObject::invokeMethod(m_repository, [this]() {m_repository->loadCountries();}, Qt::QueuedConnection);
+}
+
+void ScannerController::loadPlaces()
+{
+    QMetaObject::invokeMethod(m_repository, [this]() {m_repository->loadPlaces();}, Qt::QueuedConnection);
+}
+QVariantList ScannerController::countryList() const
+{
+    QVariantList list;
+    for (const auto &c : m_countries) {
+        QVariantMap m;
+        m["id"] = c.id;
+        m["name"] = c.name;
+        list.append(m);
+    }
+    return list;
+}
+
+QVariantList ScannerController::placeList() const
+{
+    QVariantList list;
+    for (const auto &p : m_places) {
+        QVariantMap m;
+        m["id"] = p.id;
+        m["name"] = p.name;
+        m["countryId"] = p.countryId;
+        list.append(m);
+    }
+    return list;
+}
+
+void ScannerController::addPlace(const QString &name, double radiusKm, int countryId)
+{
+    if (m_selectedPhoto.latitude == 0 && m_selectedPhoto.longitude == 0) return; 
+    m_repository->addPlace(name, m_selectedPhoto.latitude, m_selectedPhoto.longitude,radiusKm, countryId);
+}
+
+void ScannerController::addCountry(const QString &name)
+{
+    m_repository->addCountry(name, {}); 
+}
+
+void ScannerController::onCountriesLoaded(QList<CountryRecord> countries)
+{
+    m_countries = countries;
+    emit countriesChanged();
+}
+void ScannerController::onPlacesLoaded(QList<PlaceRecord> places)
+{
+    m_places = places;
+    emit placesChanged();
+}
+void ScannerController::addCountryWithBBoxes(const QString &name, const QVariantList &bboxes)
+{
+    QList<CountryBBox> parsed;
+    for (const QVariant &v : bboxes) {
+        QVariantMap m = v.toMap();
+        CountryBBox b;
+        b.latMin = m.value("latMin").toDouble();
+        b.latMax = m.value("latMax").toDouble();
+        b.lonMin = m.value("lonMin").toDouble();
+        b.lonMax = m.value("lonMax").toDouble();
+        parsed.append(b);
+    }
+    QMetaObject::invokeMethod(m_repository, [this, name, parsed]() {m_repository->addCountry(name, parsed);}, Qt::QueuedConnection);
+}
+void ScannerController::setPhotoCountry(int countryId)
+{
+    if (m_selectedPhoto.id < 0) return;
+    const int photoId = m_selectedPhoto.id;
+    QMetaObject::invokeMethod(m_repository, [this, photoId, countryId]() {m_repository->updatePhotoCountry(photoId, countryId);}, Qt::QueuedConnection);
+    m_selectedPhoto.countryId = countryId; 
+    emit selectedPhotoChanged();
+}
+
+void ScannerController::setSelectedTreeNode(const QModelIndex &index)
+{
+    PhotoTreeItem *item = m_photoTree->itemAt(index);
+    if (!item || (item->type != PhotoTreeItem::Folder && item->type != PhotoTreeItem::Media)) {
+        m_selectedFolderValid = false;
+        return;
+    }
+    m_selectedFolderMedia = item->mediaName;
+    m_selectedFolderPath = item->path;
+    m_selectedFolderValid = true;
+}
+
+void ScannerController::assignCountryToFolder(int countryId)
+{
+    if (!m_selectedFolderValid) {
+        emit status("Сначала выберите папку или раздел медиа в дереве");
+        return;
+    }
+    const QString media = m_selectedFolderMedia;
+    const QString path = m_selectedFolderPath;
+    QMetaObject::invokeMethod(m_repository, [this, media, path, countryId]() {m_repository->assignCountryToFolder(media, path, countryId);}, Qt::QueuedConnection);
 }

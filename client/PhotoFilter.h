@@ -18,6 +18,11 @@ struct PhotoFilter
     QDateTime dateFrom;
     QDateTime dateTo;
 
+    bool countryEnabled = false;
+    int countryId = -1;
+    bool placeEnabled = false;
+    int placeId = -1;
+
     bool facesEnabled = false;
     QList<int> personIds;
     bool facesUseDescriptor = false;

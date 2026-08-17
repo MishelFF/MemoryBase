@@ -7,6 +7,8 @@
 #include "PersonRecord.h"
 #include "FaceRegionRecord.h"
 #include "PhotoFilter.h"
+#include "CountryRecord.h"
+#include "PlaceRecord.h"
 
 class PhotoRepository : public QObject
 {
@@ -35,10 +37,22 @@ public slots:
     virtual void unassignRegion(int regionId) = 0;
     virtual QImage loadChipImage(const QString &id, QSize *size, const QSize & /*requestedSize*/)= 0;
     virtual void searchPhotos(const PhotoFilter &) =0;
+    
+    virtual void loadCountries() = 0;
+    virtual void addCountry(const QString &name, const QList<CountryBBox> &bboxes) = 0;
+    virtual void updateCountryBBoxes(int countryId, const QList<CountryBBox> &bboxes) = 0;
+    virtual void deleteCountry(int countryId) = 0;
 
+    virtual void loadPlaces() = 0;
+    virtual void addPlace(const QString &name, double lat, double lon, double radiusKm, int countryId) = 0;
+    virtual void updatePlace(int placeId, const QString &name, double radiusKm, int countryId) = 0;
+    virtual void deletePlace(int placeId) = 0;
+
+    virtual void assignCountriesByCoordinates() = 0;
+    virtual void assignCountryToFolder(const QString &mediaName, const QString &folderPathPrefix, int countryId) = 0;
+    virtual void updatePhotoCountry(int photoId, int countryId) = 0; 
 
 signals:
-
     void connected(bool ok);
     void mediaLoaded(QStringList media);
     void foldersLoaded(QString media,QStringList folders);
@@ -55,5 +69,17 @@ signals:
     void personReferenceSet(int personId, int regionId);
     void regionUnassigned(int regionId);
     void photosFound(QList<PhotoRecord> photos);
+
+    void countriesLoaded(QList<CountryRecord> countries);
+    void countryAdded(CountryRecord country);
+    void countryDeleted(int countryId);
+    void countriesAssigned(int updatedCount);
+
+    void placesLoaded(QList<PlaceRecord> places);
+    void placeAdded(PlaceRecord place);
+    void placeUpdated(PlaceRecord place);
+    void placeDeleted(int placeId);
+
+    void photoCountryUpdated(int photoId, int countryId);
 
 };

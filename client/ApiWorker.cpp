@@ -101,6 +101,7 @@ void ApiWorker::loadPhotos(const QString &mediaName, const QString &path) {
             photo.dateCreation = QDateTime::fromString(obj["date_creation"].toString(), Qt::ISODate);
             photo.dateAvailable = QDateTime::fromString(obj["date_available"].toString(), Qt::ISODate);
             photo.comment = obj["comment"].toString();
+            photo.countryId = obj["country_id"].toInt();
             photos.append(photo);
         }
         if (!photos.size()){
@@ -493,5 +494,283 @@ void ApiWorker::unassignRegion(int regionId)
             return;
         }
         emit regionUnassigned(regionId);
+    });
+}
+
+void ApiWorker::loadCountries()
+{
+    QUrl url(serverUrl + "countries.php");
+    QNetworkReply *reply = manager->get(QNetworkRequest(url));
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit error(reply->errorString());
+            return;
+        }
+        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        QList<CountryRecord> result;
+        for (const auto &item : doc.array()) {
+            QJsonObject obj = item.toObject();
+            CountryRecord c;
+            c.id = obj["id"].toInt();
+            c.name = obj["name"].toString();
+            for (const auto &bboxItem : obj["bboxes"].toArray()) {
+                QJsonObject bboxObj = bboxItem.toObject();
+                CountryBBox b;
+                b.id = bboxObj["id"].toInt();
+                b.latMin = bboxObj["lat_min"].toDouble();
+                b.latMax = bboxObj["lat_max"].toDouble();
+                b.lonMin = bboxObj["lon_min"].toDouble();
+                b.lonMax = bboxObj["lon_max"].toDouble();
+                c.bboxes.append(b);
+            }
+            result.append(c);
+        }
+        emit countriesLoaded(result);
+    });
+}
+
+void ApiWorker::addCountry(const QString &name, const QList<CountryBBox> &bboxes)
+{
+    QJsonObject payload;
+    payload["name"] = name;
+    QJsonArray bboxArray;
+    for (const auto &b : bboxes) {
+        QJsonObject bboxObj;
+        bboxObj["lat_min"] = b.latMin;
+        bboxObj["lat_max"] = b.latMax;
+        bboxObj["lon_min"] = b.lonMin;
+        bboxObj["lon_max"] = b.lonMax;
+        bboxArray.append(bboxObj);
+    }
+    payload["bboxes"] = bboxArray;
+
+    QUrl url(serverUrl + "country_add.php");
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QNetworkReply *reply = manager->post(request, QJsonDocument(payload).toJson());
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit error(reply->errorString());
+            return;
+        }
+        QJsonObject obj = QJsonDocument::fromJson(reply->readAll()).object();
+        CountryRecord result;
+        result.id = obj["id"].toInt();
+        result.name = obj["name"].toString();
+        emit countryAdded(result);
+    });
+}
+
+void ApiWorker::updateCountryBBoxes(int countryId, const QList<CountryBBox> &bboxes)
+{
+    QJsonObject payload;
+    payload["country_id"] = countryId;
+    QJsonArray bboxArray;
+    for (const auto &b : bboxes) {
+        QJsonObject bboxObj;
+        bboxObj["lat_min"] = b.latMin;
+        bboxObj["lat_max"] = b.latMax;
+        bboxObj["lon_min"] = b.lonMin;
+        bboxObj["lon_max"] = b.lonMax;
+        bboxArray.append(bboxObj);
+    }
+    payload["bboxes"] = bboxArray;
+
+    QUrl url(serverUrl + "country_bboxes_update.php");
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QNetworkReply *reply = manager->post(request, QJsonDocument(payload).toJson());
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit error(reply->errorString());
+            return;
+        }
+        loadCountries(); // как и в DatabaseWorker - перечитываем целиком
+    });
+}
+
+void ApiWorker::deleteCountry(int countryId)
+{
+    QUrl url(serverUrl + QString("country_delete.php?id=%1").arg(countryId));
+    QNetworkReply *reply = manager->deleteResource(QNetworkRequest(url));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, countryId]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit error(reply->errorString());
+            return;
+        }
+        emit countryDeleted(countryId);
+    });
+}
+
+void ApiWorker::loadPlaces()
+{
+    QUrl url(serverUrl + "places.php");
+    QNetworkReply *reply = manager->get(QNetworkRequest(url));
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit error(reply->errorString());
+            return;
+        }
+        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        QList<PlaceRecord> result;
+        for (const auto &item : doc.array()) {
+            QJsonObject obj = item.toObject();
+            PlaceRecord p;
+            p.id = obj["id"].toInt();
+            p.name = obj["name"].toString();
+            p.latitude = obj["latitude"].toDouble();
+            p.longitude = obj["longitude"].toDouble();
+            p.radiusKm = obj["radius_km"].toDouble();
+            p.countryId = obj["country_id"].isNull() ? -1 : obj["country_id"].toInt();
+            result.append(p);
+        }
+        emit placesLoaded(result);
+    });
+}
+
+void ApiWorker::addPlace(const QString &name, double lat, double lon, double radiusKm, int countryId)
+{
+    QJsonObject payload;
+    payload["name"] = name;
+    payload["latitude"] = lat;
+    payload["longitude"] = lon;
+    payload["radius_km"] = radiusKm;
+    if (countryId >= 0)
+        payload["country_id"] = countryId;
+    else
+        payload["country_id"] = QJsonValue::Null;
+
+    QUrl url(serverUrl + "place_add.php");
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QNetworkReply *reply = manager->post(request, QJsonDocument(payload).toJson());
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit error(reply->errorString());
+            return;
+        }
+        QJsonObject obj = QJsonDocument::fromJson(reply->readAll()).object();
+        PlaceRecord result;
+        result.id = obj["id"].toInt();
+        result.name = obj["name"].toString();
+        result.latitude = obj["latitude"].toDouble();
+        result.longitude = obj["longitude"].toDouble();
+        result.radiusKm = obj["radius_km"].toDouble();
+        result.countryId = obj["country_id"].isNull() ? -1 : obj["country_id"].toInt();
+        emit placeAdded(result);
+    });
+}
+
+void ApiWorker::updatePlace(int placeId, const QString &name, double radiusKm, int countryId)
+{
+    QJsonObject payload;
+    payload["id"] = placeId;
+    payload["name"] = name;
+    payload["radius_km"] = radiusKm;
+    payload["country_id"] = countryId >= 0 ? QJsonValue(countryId) : QJsonValue::Null;
+
+    QUrl url(serverUrl + "place_update.php");
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QNetworkReply *reply = manager->post(request, QJsonDocument(payload).toJson());
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit error(reply->errorString());
+            return;
+        }
+        QJsonObject obj = QJsonDocument::fromJson(reply->readAll()).object();
+        PlaceRecord result;
+        result.id = obj["id"].toInt();
+        result.name = obj["name"].toString();
+        result.latitude = obj["latitude"].toDouble();
+        result.longitude = obj["longitude"].toDouble();
+        result.radiusKm = obj["radius_km"].toDouble();
+        result.countryId = obj["country_id"].isNull() ? -1 : obj["country_id"].toInt();
+        emit placeUpdated(result);
+    });
+}
+
+void ApiWorker::deletePlace(int placeId)
+{
+    QUrl url(serverUrl + QString("place_delete.php?id=%1").arg(placeId));
+    QNetworkReply *reply = manager->deleteResource(QNetworkRequest(url));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, placeId]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit error(reply->errorString());
+            return;
+        }
+        emit placeDeleted(placeId);
+    });
+}
+
+void ApiWorker::assignCountriesByCoordinates()
+{
+    QUrl url(serverUrl + "assign_countries_by_coordinates.php");
+    QNetworkReply *reply = manager->post(QNetworkRequest(url), QByteArray());
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit error(reply->errorString());
+            return;
+        }
+        QJsonObject obj = QJsonDocument::fromJson(reply->readAll()).object();
+        emit countriesAssigned(obj["updated"].toInt());
+    });
+}
+
+void ApiWorker::assignCountryToFolder(const QString &mediaName,
+                                       const QString &folderPathPrefix,
+                                       int countryId)
+{
+    QJsonObject payload;
+    payload["media_name"] = mediaName;
+    payload["folder_prefix"] = folderPathPrefix;
+    payload["country_id"] = countryId;
+
+    QUrl url(serverUrl + "assign_country_to_folder.php");
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QNetworkReply *reply = manager->post(request, QJsonDocument(payload).toJson());
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit error(reply->errorString());
+            return;
+        }
+        QJsonObject obj = QJsonDocument::fromJson(reply->readAll()).object();
+        emit countriesAssigned(obj["updated"].toInt());
+    });
+}
+void ApiWorker::updatePhotoCountry(int photoId, int countryId)
+{
+    QJsonObject payload;
+    payload["photo_id"] = photoId;
+    payload["country_id"] = countryId >= 0 ? QJsonValue(countryId) : QJsonValue::Null;
+
+    QUrl url(serverUrl + "photo_country_update.php");
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QNetworkReply *reply = manager->post(request, QJsonDocument(payload).toJson());
+    connect(reply, &QNetworkReply::finished, this, [this, reply, photoId, countryId]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit error(reply->errorString());
+            return;
+        }
+        emit photoCountryUpdated(photoId, countryId);
     });
 }

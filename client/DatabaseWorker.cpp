@@ -98,7 +98,7 @@ void DatabaseWorker::loadPhotos(const QString &mediaName,const QString &path)
 {
     QList<PhotoRecord> photos;
     QSqlQuery query(db);
-    query.prepare(R"(SELECT id, file, path, media_name, width, height, ext, date_creation FROM photobase.photo_images WHERE media_name=:media AND path=:path ORDER BY file)");
+    query.prepare(R"(SELECT id, file, path, media_name, width, height, ext, date_creation,country_id FROM photobase.photo_images WHERE media_name=:media AND path=:path ORDER BY file)");
     query.bindValue(":media",mediaName);
     query.bindValue(":path",path);
     if(query.exec()){
@@ -108,18 +108,11 @@ void DatabaseWorker::loadPhotos(const QString &mediaName,const QString &path)
             photo.file = query.value("file").toString();
             photo.path = query.value("path").toString();
             photo.mediaName = query.value("media_name").toString();
-            photo.width =
-                query.value("width")
-                .toInt();
-            photo.height =
-                query.value("height")
-                .toInt();
-            photo.extension =
-                query.value("ext")
-                .toString();
-            photo.dateCreation =
-                query.value("date_creation")
-                .toDateTime();
+            photo.width = query.value("width").toInt();
+            photo.height = query.value("height").toInt();
+            photo.extension = query.value("ext").toString();
+            photo.dateCreation = query.value("date_creation").toDateTime();
+            photo.countryId =query.value("country_id").toInt();
             photos.append(photo);
         }
         if (!photos.size()){
@@ -931,10 +924,18 @@ void DatabaseWorker::searchPhotos(const PhotoFilter &filter)
     sql+=(" AND (pi.ext='jpg' OR pi.ext='jpeg') " );    
     if (filter.dateEnabled)
         sql += QStringLiteral(" AND COALESCE(pi.date_creation, pi.date_available) BETWEEN :date_from AND :date_to");
-     sql += (filter.sortBy == PhotoFilter::SortBy::FaceMatchCount)
+    if (filter.countryEnabled && filter.countryId >= 0) sql += QStringLiteral(" AND pi.country_id = :country_id");
+    // haversine: расстояние photo <-> place.lat/lon, сравниваем с радиусом места
+    if (filter.placeEnabled && filter.placeId >= 0) {
+        sql += QStringLiteral(R"( AND EXISTS (SELECT 1 FROM photobase.places pl WHERE pl.id = :place_id
+               AND (pi.latitude != 0 OR pi.longitude != 0) AND POWER((pi.latitude - pl.latitude) * 111.32, 2)
+               + POWER((pi.longitude - pl.longitude) * 111.32 * cos(radians(pl.latitude)), 2) <= POWER(pl.radius_km, 2)))");
+    }
+    sql += (filter.sortBy == PhotoFilter::SortBy::FaceMatchCount)
         ? QStringLiteral(" ORDER BY match_count DESC, COALESCE(pi.date_creation, pi.date_available) DESC")
         : QStringLiteral(" ORDER BY COALESCE(pi.date_creation, pi.date_available) DESC");
-     if (filter.limitEnabled) sql += QStringLiteral(" LIMIT :max_count");
+     
+    if (filter.limitEnabled) sql += QStringLiteral(" LIMIT :max_count");
      QSqlQuery query(db);
     if (!query.prepare(sql)) {
         qDebug() << "Ошибка PREPARE (searchPhotos):" << query.lastError().text();
@@ -958,7 +959,10 @@ void DatabaseWorker::searchPhotos(const PhotoFilter &filter)
         query.bindValue(":date_from", filter.dateFrom);
         query.bindValue(":date_to", filter.dateTo);
     }
- 
+    if (filter.countryEnabled && filter.countryId >= 0)
+        query.bindValue(":country_id", filter.countryId);
+    if (filter.placeEnabled && filter.placeId >= 0)
+        query.bindValue(":place_id", filter.placeId);
     if (filter.limitEnabled)
         query.bindValue(":max_count", filter.maxCount);
  
@@ -980,4 +984,301 @@ void DatabaseWorker::searchPhotos(const PhotoFilter &filter)
     }
  
     emit photosFound(result);
+}
+void DatabaseWorker::loadCountries()
+{
+    QHash<int, CountryRecord> countries;
+    QList<int> order;
+
+    QSqlQuery countryQuery(db);
+    if (!countryQuery.exec(R"(
+        SELECT id, name FROM photobase.countries ORDER BY name
+    )")) {
+        qDebug() << "Ошибка EXEC (loadCountries):" << countryQuery.lastError().text();
+        emit error(countryQuery.lastError().text());
+        return;
+    }
+    while (countryQuery.next()) {
+        CountryRecord c;
+        c.id = countryQuery.value(0).toInt();
+        c.name = countryQuery.value(1).toString();
+        countries.insert(c.id, c);
+        order.append(c.id);
+    }
+
+    QSqlQuery bboxQuery(db);
+    if (!bboxQuery.exec(R"(
+        SELECT id, country_id, lat_min, lat_max, lon_min, lon_max
+        FROM photobase.country_bboxes
+    )")) {
+        qDebug() << "Ошибка EXEC (loadCountries/bboxes):" << bboxQuery.lastError().text();
+        emit error(bboxQuery.lastError().text());
+        return;
+    }
+    while (bboxQuery.next()) {
+        int countryId = bboxQuery.value(1).toInt();
+        if (!countries.contains(countryId))
+            continue;
+
+        CountryBBox b;
+        b.id = bboxQuery.value(0).toInt();
+        b.latMin = bboxQuery.value(2).toDouble();
+        b.latMax = bboxQuery.value(3).toDouble();
+        b.lonMin = bboxQuery.value(4).toDouble();
+        b.lonMax = bboxQuery.value(5).toDouble();
+        countries[countryId].bboxes.append(b);
+    }
+
+    QList<CountryRecord> result;
+    for (int id : order)
+        result.append(countries.value(id));
+
+    emit countriesLoaded(result);
+}
+
+void DatabaseWorker::addCountry(const QString &name, const QList<CountryBBox> &bboxes)
+{
+    QSqlQuery query(db);
+    query.prepare(R"(
+        INSERT INTO photobase.countries (name) VALUES (:name) RETURNING id
+    )");
+    query.bindValue(":name", name);
+
+    if (!query.exec() || !query.next()) {
+        qDebug() << "Ошибка EXEC (addCountry):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+
+    CountryRecord result;
+    result.id = query.value(0).toInt();
+    result.name = name;
+
+    for (const auto &b : bboxes) {
+        QSqlQuery bboxInsert(db);
+        bboxInsert.prepare(R"(
+            INSERT INTO photobase.country_bboxes (country_id, lat_min, lat_max, lon_min, lon_max)
+            VALUES (:cid, :latMin, :latMax, :lonMin, :lonMax)
+            RETURNING id
+        )");
+        bboxInsert.bindValue(":cid", result.id);
+        bboxInsert.bindValue(":latMin", b.latMin);
+        bboxInsert.bindValue(":latMax", b.latMax);
+        bboxInsert.bindValue(":lonMin", b.lonMin);
+        bboxInsert.bindValue(":lonMax", b.lonMax);
+
+        if (!bboxInsert.exec() || !bboxInsert.next()) {
+            qDebug() << "Ошибка EXEC (addCountry/bbox):" << bboxInsert.lastError().text();
+            continue;
+        }
+        CountryBBox saved = b;
+        saved.id = bboxInsert.value(0).toInt();
+        result.bboxes.append(saved);
+    }
+
+    emit countryAdded(result);
+}
+
+void DatabaseWorker::updateCountryBBoxes(int countryId, const QList<CountryBBox> &bboxes)
+{
+    QSqlQuery del(db);
+    del.prepare(R"(DELETE FROM photobase.country_bboxes WHERE country_id = :cid)");
+    del.bindValue(":cid", countryId);
+    if (!del.exec()) {
+        qDebug() << "Ошибка EXEC (updateCountryBBoxes/delete):" << del.lastError().text();
+        emit error(del.lastError().text());
+        return;
+    }
+
+    for (const auto &b : bboxes) {
+        QSqlQuery ins(db);
+        ins.prepare(R"(
+            INSERT INTO photobase.country_bboxes (country_id, lat_min, lat_max, lon_min, lon_max)
+            VALUES (:cid, :latMin, :latMax, :lonMin, :lonMax)
+        )");
+        ins.bindValue(":cid", countryId);
+        ins.bindValue(":latMin", b.latMin);
+        ins.bindValue(":latMax", b.latMax);
+        ins.bindValue(":lonMin", b.lonMin);
+        ins.bindValue(":lonMax", b.lonMax);
+        if (!ins.exec())
+            qDebug() << "Ошибка EXEC (updateCountryBBoxes/insert):" << ins.lastError().text();
+    }
+
+    loadCountries(); // проще перечитать и переэмитить целиком
+}
+
+void DatabaseWorker::deleteCountry(int countryId)
+{
+    QSqlQuery query(db);
+    query.prepare(R"(DELETE FROM photobase.countries WHERE id = :id)");
+    query.bindValue(":id", countryId);
+    if (!query.exec()) {
+        qDebug() << "Ошибка EXEC (deleteCountry):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+    emit countryDeleted(countryId);
+}
+
+void DatabaseWorker::loadPlaces()
+{
+    QList<PlaceRecord> result;
+
+    QSqlQuery query(db);
+    if (!query.exec(R"(
+        SELECT id, name, latitude, longitude, radius_km, country_id
+        FROM photobase.places
+        ORDER BY name
+    )")) {
+        qDebug() << "Ошибка EXEC (loadPlaces):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+
+    while (query.next()) {
+        PlaceRecord p;
+        p.id = query.value(0).toInt();
+        p.name = query.value(1).toString();
+        p.latitude = query.value(2).toDouble();
+        p.longitude = query.value(3).toDouble();
+        p.radiusKm = query.value(4).toDouble();
+        p.countryId = query.value(5).isNull() ? -1 : query.value(5).toInt();
+        result.append(p);
+    }
+
+    emit placesLoaded(result);
+}
+
+void DatabaseWorker::addPlace(const QString &name, double lat, double lon,
+                               double radiusKm, int countryId)
+{
+    QSqlQuery query(db);
+    query.prepare(R"(
+        INSERT INTO photobase.places (name, latitude, longitude, radius_km, country_id)
+        VALUES (:name, :lat, :lon, :radius, :countryId)
+        RETURNING id
+    )");
+    query.bindValue(":name", name);
+    query.bindValue(":lat", lat);
+    query.bindValue(":lon", lon);
+    query.bindValue(":radius", radiusKm);
+    query.bindValue(":countryId", countryId >= 0 ? QVariant(countryId)
+                                                   : QVariant(QMetaType(QMetaType::Int)));
+
+    if (!query.exec() || !query.next()) {
+        qDebug() << "Ошибка EXEC (addPlace):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+
+    PlaceRecord result;
+    result.id = query.value(0).toInt();
+    result.name = name;
+    result.latitude = lat;
+    result.longitude = lon;
+    result.radiusKm = radiusKm;
+    result.countryId = countryId;
+
+    emit placeAdded(result);
+}
+
+void DatabaseWorker::updatePlace(int placeId, const QString &name, double radiusKm, int countryId)
+{
+    QSqlQuery query(db);
+    query.prepare(R"(
+        UPDATE photobase.places
+        SET name = :name, radius_km = :radius, country_id = :countryId
+        WHERE id = :id
+        RETURNING latitude, longitude
+    )");
+    query.bindValue(":name", name);
+    query.bindValue(":radius", radiusKm);
+    query.bindValue(":countryId", countryId >= 0 ? QVariant(countryId) : QVariant(QMetaType(QMetaType::Int)));
+    query.bindValue(":id", placeId);
+
+    if (!query.exec() || !query.next()) {
+        qDebug() << "Ошибка EXEC (updatePlace):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+
+    PlaceRecord result;
+    result.id = placeId;
+    result.name = name;
+    result.radiusKm = radiusKm;
+    result.countryId = countryId;
+    result.latitude = query.value(0).toDouble();
+    result.longitude = query.value(1).toDouble();
+
+    emit placeUpdated(result);
+}
+
+void DatabaseWorker::deletePlace(int placeId)
+{
+    QSqlQuery query(db);
+    query.prepare(R"(DELETE FROM photobase.places WHERE id = :id)");
+    query.bindValue(":id", placeId);
+    if (!query.exec()) {
+        qDebug() << "Ошибка EXEC (deletePlace):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+    emit placeDeleted(placeId);
+}
+
+void DatabaseWorker::assignCountriesByCoordinates()
+{
+    QSqlQuery query(db);
+    query.prepare(R"(
+        UPDATE photobase.photo_images
+        SET country_id = (
+            SELECT cb.country_id FROM photobase.country_bboxes cb
+            WHERE photos.latitude  BETWEEN cb.lat_min AND cb.lat_max
+              AND photos.longitude BETWEEN cb.lon_min AND cb.lon_max
+            LIMIT 1
+        )
+        WHERE country_id IS NULL
+          AND (latitude != 0 OR longitude != 0)
+    )");
+
+    if (!query.exec()) {
+        qDebug() << "Ошибка EXEC (assignCountriesByCoordinates):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+
+    emit countriesAssigned(query.numRowsAffected());
+}
+
+void DatabaseWorker::assignCountryToFolder(const QString &mediaName,const QString &folderPathPrefix,int countryId)
+{
+    QSqlQuery query(db);
+    query.prepare(R"(
+        UPDATE photobase.photo_images SET country_id = :countryId WHERE media_name = :media
+          AND (path = :prefix OR path LIKE :prefixLike))");
+    query.bindValue(":countryId", countryId);
+    query.bindValue(":media", mediaName);
+    query.bindValue(":prefix", folderPathPrefix);
+    query.bindValue(":prefixLike", folderPathPrefix + "/%");
+
+    if (!query.exec()) {
+        qDebug() << "Ошибка EXEC (assignCountryToFolder):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+    emit countriesAssigned(query.numRowsAffected());
+}
+void DatabaseWorker::updatePhotoCountry(int photoId, int countryId)
+{
+    QSqlQuery query(db);
+    query.prepare(R"(UPDATE photobase.photo_images SET country_id = :countryId WHERE id = :id)");
+    query.bindValue(":countryId", countryId >= 0 ? QVariant(countryId) : QVariant(QMetaType(QMetaType::Int)));
+    query.bindValue(":id", photoId);
+    if (!query.exec()) {
+        qDebug() << "Ошибка EXEC (updatePhotoCountry):" << query.lastError().text();
+        emit error(query.lastError().text());
+        return;
+    }
+    emit photoCountryUpdated(photoId, countryId);
 }

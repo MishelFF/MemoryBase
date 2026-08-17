@@ -159,13 +159,6 @@ endif()
 
 if(ANDROID)
     set_property(TARGET PhotoDB PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
-    message(STATUS "QT_ANDROID_KEYSTORE_PATH = '${QT_ANDROID_KEYSTORE_PATH}'")
-    if(DEFINED QT_ANDROID_KEYSTORE_PATH)
-        set_target_properties(PhotoDB PROPERTIES
-            QT_ANDROID_KEYSTORE_PATH  "${QT_ANDROID_KEYSTORE_PATH}"
-            QT_ANDROID_KEYSTORE_ALIAS "${QT_ANDROID_KEYSTORE_ALIAS}"
-        )
-    endif()
 endif()
 
 set_source_files_properties(Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)

@@ -75,7 +75,7 @@ android {
         noCompress 'rcc'
     }
 
-    buildTypes {
+	buildTypes {
         debug {
             packaging {
                 jniLibs {
@@ -95,13 +95,11 @@ android {
             }
         }
     }
-
-   	packagingOptions {
-			jniLibs {
-			useLegacyPackaging = legacyPackaging
-		}
-	}
-
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = project.hasProperty('legacyPackaging') ? project.legacyPackaging.toBoolean() : false
+        }
+    }
     defaultConfig {
         resConfig "en"
         minSdkVersion qtMinSdkVersion

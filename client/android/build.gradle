@@ -3,14 +3,12 @@ buildscript {
         google()
         mavenCentral()
     }
-
     dependencies {
         //noinspection AndroidGradlePluginVersion
-        classpath 'com.android.tools.build:gradle:9.0.0'
+        classpath 'com.android.tools.build:gradle:8.13.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0"
     }
 }
-
 repositories {
     google()
     mavenCentral()

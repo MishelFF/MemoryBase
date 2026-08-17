@@ -3,14 +3,12 @@ buildscript {
         google()
         mavenCentral()
     }
-
     dependencies {
         //noinspection AndroidGradlePluginVersion
-        classpath 'com.android.tools.build:gradle:9.0.0'
+        classpath 'com.android.tools.build:gradle:8.13.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0"
     }
 }
-
 repositories {
     google()
     mavenCentral()
@@ -90,19 +88,14 @@ android {
             ndk {
                 abiFilters "arm64-v8a"
             }
-            packaging {
-                jniLibs {
-                    // ничего не добавляем — символы стрипаются по умолчанию AGP
-                }
-            }
         }
     }
 
-   	packagingOptions {
-			jniLibs {
-			useLegacyPackaging = legacyPackaging
-		}
-	}
+    packaging {
+        jniLibs {
+            useLegacyPackaging = project.hasProperty('legacyPackaging') ? project.legacyPackaging.toBoolean() : false
+        }
+    }
 
     defaultConfig {
         resConfig "en"

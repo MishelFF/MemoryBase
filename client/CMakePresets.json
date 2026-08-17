@@ -127,9 +127,7 @@
                 "CMAKE_BUILD_TYPE": "Release",
                 "QT_ANDROID_SIGN_APK": "ON",
                 "QT_ANDROID_KEYSTORE_PATH": "$env{ANDROID_KEYSTORE_PATH}",
-                "QT_ANDROID_KEYSTORE_ALIAS": "$env{ANDROID_KEYSTORE_ALIAS}",
-                "QT_ANDROID_KEYSTORE_STORE_PASS": "$env{ANDROID_KEYSTORE_STORE_PASSWORD}",
-                "QT_ANDROID_KEYSTORE_KEY_PASS": "$env{ANDROID_KEYSTORE_KEY_PASSWORD}"
+                "QT_ANDROID_KEYSTORE_ALIAS": "$env{ANDROID_KEYSTORE_ALIAS}"
             }
         },
         {

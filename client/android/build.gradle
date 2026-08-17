@@ -75,7 +75,7 @@ android {
         noCompress 'rcc'
     }
 
-	buildTypes {
+    buildTypes {
         debug {
             packaging {
                 jniLibs {
@@ -88,18 +88,15 @@ android {
             ndk {
                 abiFilters "arm64-v8a"
             }
-            packaging {
-                jniLibs {
-                    // ничего не добавляем — символы стрипаются по умолчанию AGP
-                }
-            }
         }
     }
-    packagingOptions {
+
+    packaging {
         jniLibs {
             useLegacyPackaging = project.hasProperty('legacyPackaging') ? project.legacyPackaging.toBoolean() : false
         }
     }
+
     defaultConfig {
         resConfig "en"
         minSdkVersion qtMinSdkVersion
